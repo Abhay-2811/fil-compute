@@ -1,0 +1,48 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://datatzen.io/schemas/preflight.json",
+  "title": "Preflight",
+  "description": "Core → Node preflight request and response",
+  "definitions": {
+    "ComputeRequirements": {
+      "type": "object",
+      "required": ["cpu_cores", "memory_mb"],
+      "properties": {
+        "cpu_cores": { "type": "number", "minimum": 0.1 },
+        "memory_mb": { "type": "integer", "minimum": 1 },
+        "gpu": { "type": "object", "properties": { "count": { "type": "integer" }, "model": { "type": "string" } } }
+      }
+    }
+  },
+  "oneOf": [
+    {
+      "title": "PreflightRequest",
+      "type": "object",
+      "description": "Core → Node: check availability, capacity, CID presence",
+      "required": ["job_id", "cid", "compute_requirements"],
+      "properties": {
+        "job_id": { "type": "string" },
+        "cid": { "type": "string", "description": "Input data CID to verify presence" },
+        "compute_requirements": { "$ref": "#/definitions/ComputeRequirements" }
+      }
+    },
+    {
+      "title": "PreflightResponse",
+      "type": "object",
+      "description": "Node → Core: result of preflight checks",
+      "required": ["ok"],
+      "properties": {
+        "ok": { "type": "boolean", "description": "True if node is available, has capacity, has CID" },
+        "error": {
+          "type": "object",
+          "description": "Present when ok is false",
+          "properties": {
+            "code": { "type": "string", "enum": ["UNAVAILABLE", "INSUFFICIENT_CAPACITY", "CID_NOT_FOUND"] },
+            "message": { "type": "string" }
+          }
+        },
+        "signature": { "type": "string", "description": "Node signature over response (optional in v0, required for verification)" }
+      }
+    }
+  ]
+}

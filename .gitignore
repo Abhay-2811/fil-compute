@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.env
+.env.local
+*.log
+coverage/
+coverage.json
+
+# Hardhat (contracts/)
+contracts/cache/
+contracts/artifacts/
+contracts/typechain-types/

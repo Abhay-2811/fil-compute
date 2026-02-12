@@ -1,0 +1,20 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "cu_model": "v0",
+  "description": "Compute Unit (CU) metering formula v0: resource-weighted + time-based",
+  "formula": {
+    "cpu_cu": "cpu_seconds * cpu_weight",
+    "mem_cu": "memory_mb_peak * wall_seconds * mem_weight",
+    "cu_used": "cpu_cu + mem_cu"
+  },
+  "weights": {
+    "cpu_weight": 0.001,
+    "mem_weight": 0.00001
+  },
+  "notes": [
+    "cpu_seconds: from cgroup/usage",
+    "memory_mb_peak: peak RSS during run",
+    "wall_seconds: actual wall time",
+    "GPU term optional later: gpu_cu = gpu_seconds * gpu_weight"
+  ]
+}

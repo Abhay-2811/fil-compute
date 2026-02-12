@@ -1,0 +1,17 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://datatzen.io/schemas/receipt.json",
+  "title": "Receipt",
+  "description": "Node-signed receipt returned on successful job completion; used for settlement",
+  "type": "object",
+  "required": ["job_id", "attempt_id", "result_cid", "cu_used", "nodeid", "signed_at"],
+  "properties": {
+    "job_id": { "type": "string" },
+    "attempt_id": { "type": "string" },
+    "result_cid": { "type": "string" },
+    "cu_used": { "type": "number", "minimum": 0 },
+    "nodeid": { "type": "string", "description": "Node identity that executed the job" },
+    "signed_at": { "type": "string", "format": "date-time" },
+    "signature": { "type": "string", "description": "Node signature over receipt payload (prevents forgery)" }
+  }
+}

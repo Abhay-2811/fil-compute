@@ -1,0 +1,44 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://datatzen.io/schemas/complete.json",
+  "title": "Complete",
+  "description": "Node → Core: job completion (SUCCESS or CONTAINER_ERROR)",
+  "type": "object",
+  "required": ["job_id", "attempt_id", "status", "metrics", "cu_used"],
+  "properties": {
+    "job_id": { "type": "string" },
+    "attempt_id": { "type": "string" },
+    "status": {
+      "type": "string",
+      "enum": ["SUCCESS", "CONTAINER_ERROR"],
+      "description": "SUCCESS = result_cid present; CONTAINER_ERROR = charge used CU, return error to user"
+    },
+    "metrics": {
+      "type": "object",
+      "required": ["wall_seconds", "cpu_seconds", "memory_mb_peak"],
+      "properties": {
+        "wall_seconds": { "type": "number", "minimum": 0 },
+        "cpu_seconds": { "type": "number", "minimum": 0 },
+        "memory_mb_peak": { "type": "number", "minimum": 0 }
+      }
+    },
+    "cu_used": { "type": "number", "minimum": 0, "description": "Compute units for this run" },
+    "result_cid": {
+      "type": "string",
+      "description": "Required when status is SUCCESS; result stored somewhere, CID returned"
+    },
+    "error": {
+      "type": "object",
+      "description": "Present when status is CONTAINER_ERROR",
+      "properties": {
+        "exit_code": { "type": "integer" },
+        "message": { "type": "string" },
+        "logs_tail": { "type": "string", "maxLength": 8192, "description": "Bounded log tail" }
+      }
+    },
+    "signature": { "type": "string", "description": "Node signature over this payload" }
+  },
+  "if": { "properties": { "status": { "const": "SUCCESS" } }, "required": ["status"] },
+  "then": { "required": ["result_cid"] },
+  "else": true
+}
