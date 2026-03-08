@@ -40,7 +40,7 @@ app.post("/preflight", async (req: Request, res: Response) => {
 
     logger.info("Checking Docker availability", { job_id: jobId });
     const dockerCheck = await checkDockerAvailable().then(
-      () => ({ code: "UNAVAILABLE" as const, message: "Docker not available" }) as const,
+      () => null,
       (err) => ({ code: "UNAVAILABLE" as const, message: err instanceof Error ? err.message : String(err) })
     );
     if (dockerCheck) {
