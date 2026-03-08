@@ -1,9 +1,38 @@
 import { spawn } from "child_process";
 import path from "path";
 import fs from "fs";
-import { CU_WEIGHTS } from "./config.js";
+import { CU_WEIGHTS, DOCKER_BIN } from "./config.js";
 
 const DATA_MOUNT_PATH = "/data/input";
+
+/**
+ * Check that Docker is installed and runnable (for preflight).
+ * Resolves if `docker --version` succeeds; rejects with message otherwise.
+ */
+export function checkDockerAvailable(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const proc = spawn(DOCKER_BIN, ["--version"], { stdio: ["ignore", "pipe", "pipe"] });
+    let stderr = "";
+    proc.stderr?.on("data", (d: Buffer) => {
+      stderr += d.toString();
+    });
+    proc.on("close", (code) => {
+      if (code === 0) return resolve();
+      reject(new Error(`Docker exited ${code}: ${stderr || "no output"}`));
+    });
+    proc.on("error", (err: NodeJS.ErrnoException) => {
+      if (err.code === "ENOENT") {
+        reject(
+          new Error(
+            `Docker not found. Install Docker or set DOCKER_BIN to the full path (e.g. DOCKER_BIN=/usr/bin/docker).`
+          )
+        );
+      } else {
+        reject(err);
+      }
+    });
+  });
+}
 
 export interface RunDockerOpts {
   image: string;
@@ -77,7 +106,7 @@ export function runDocker(opts: RunDockerOpts): Promise<RunDockerResult> {
 
   return new Promise((resolve, reject) => {
     const startWall = Date.now();
-    const proc = spawn("docker", args, {
+    const proc = spawn(DOCKER_BIN, args, {
       stdio: ["ignore", "pipe", "pipe"],
     });
 
@@ -113,9 +142,17 @@ export function runDocker(opts: RunDockerOpts): Promise<RunDockerResult> {
         memoryMbPeak,
       });
     });
-    proc.on("error", (err) => {
+    proc.on("error", (err: NodeJS.ErrnoException) => {
       clearTimeout(timeout);
-      reject(err);
+      if (err.code === "ENOENT") {
+        reject(
+          new Error(
+            `Docker not found (ENOENT). Install Docker or set DOCKER_BIN to the full path (e.g. DOCKER_BIN=/usr/bin/docker). Current: ${DOCKER_BIN}`
+          )
+        );
+      } else {
+        reject(err);
+      }
     });
   });
 }

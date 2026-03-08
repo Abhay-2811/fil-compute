@@ -3,7 +3,7 @@ import fs from "fs";
 import crypto from "crypto";
 import { parseDatasetIdFromCid } from "./config.js";
 import { preflightData, retrieveDatasetFile } from "./retrieve.js";
-import { runDocker, computeCuUsed } from "./docker-runner.js";
+import { runDocker, computeCuUsed, checkDockerAvailable } from "./docker-runner.js";
 import { sendComplete } from "./complete-callback.js";
 
 const app = express();
@@ -28,6 +28,14 @@ app.post("/preflight", async (req: Request, res: Response) => {
           message: "Only dataset:N or dataset_id supported for PDP",
         },
       });
+    }
+
+    const dockerCheck = await checkDockerAvailable().then(
+      () => null as const,
+      (err) => ({ code: "UNAVAILABLE" as const, message: err instanceof Error ? err.message : String(err) })
+    );
+    if (dockerCheck) {
+      return res.json({ ok: false, error: dockerCheck });
     }
 
     const result = await preflightData(datasetId);

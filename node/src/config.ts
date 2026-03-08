@@ -14,6 +14,9 @@ export const RETRIEVE_SCRIPT_PATH =
 export const RETRIEVE_OUTPUT_DIR =
   process.env.RETRIEVE_OUTPUT_DIR || "/tmp/curio-retrieved";
 
+/** Docker binary (use full path if docker is not in PATH when node runs, e.g. /usr/bin/docker) */
+export const DOCKER_BIN = process.env.DOCKER_BIN || "docker";
+
 /** CU weights (v0). Match config/cu-model-v0.json */
 export const CU_WEIGHTS = {
   cpu_weight: 0.001,
