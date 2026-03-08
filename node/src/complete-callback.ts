@@ -1,5 +1,6 @@
 import { CORE_URL, SKIP_CORE_CALLBACK } from "./config.js";
 import { computeCuUsed, type CuMetrics } from "./docker-runner.js";
+import { logger } from "./logger.js";
 
 const LOG_TAIL_MAX = 8192;
 
@@ -55,11 +56,18 @@ export async function sendComplete(payload: CompletePayload): Promise<void> {
   }
 
   if (SKIP_CORE_CALLBACK) {
-    console.log("[SKIP_CORE_CALLBACK] Would POST to Core:", JSON.stringify(body, null, 2));
+    logger.info("SKIP_CORE_CALLBACK: would POST complete to Core (payload logged at debug)", {
+      job_id: jobId,
+      attempt_id: attemptId,
+      status,
+      cu_used: body.cu_used,
+    });
+    logger.debug("Complete payload (skipped)", body);
     return;
   }
 
   const url = `${CORE_URL.replace(/\/$/, "")}/jobs/${jobId}/complete`;
+  logger.debug("POSTing complete to Core", { url, job_id: jobId, status });
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -67,6 +75,8 @@ export async function sendComplete(payload: CompletePayload): Promise<void> {
   });
   if (!res.ok) {
     const text = await res.text();
+    logger.error("Core complete callback failed", { job_id: jobId, status_code: res.status, response: text.slice(0, 200) });
     throw new Error(`Core complete callback failed: ${res.status} ${text}`);
   }
+  logger.info("Complete callback sent to Core", { job_id: jobId, attempt_id: attemptId, status });
 }

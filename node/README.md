@@ -13,6 +13,7 @@ Runs on the same server as the PDP node (Curio + Yugabyte). Accepts Core's prefl
 | `CORE_URL` | Core API base URL (for complete callback) | `http://localhost:3000` |
 | `PORT` | HTTP listen port | `4000` |
 | `SKIP_CORE_CALLBACK` | If `1` or `true`, log complete payload instead of POSTing to Core (for standalone testing) | — |
+| `LOG_LEVEL` | Log level: `error`, `warn`, `info`, `debug` (default `info`) | `info` |
 | `DOCKER_BIN` | Docker binary (use full path if `docker` is not in PATH when the process runs, e.g. `/usr/bin/docker`) | `docker` |
 | `RETRIEVE_SCRIPT_PATH` | Path to `pdp-node-data-retrieve.sh` | `scripts/pdp-node-data-retrieve.sh` (relative to cwd) |
 | `RETRIEVE_OUTPUT_DIR` | Dir where retrieve script writes `.dat` files (must match script’s OUTPUT_DIR) | `/tmp/curio-retrieved` |

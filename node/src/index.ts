@@ -5,6 +5,7 @@ import { parseDatasetIdFromCid } from "./config.js";
 import { preflightData, retrieveDatasetFile } from "./retrieve.js";
 import { runDocker, computeCuUsed, checkDockerAvailable } from "./docker-runner.js";
 import { sendComplete } from "./complete-callback.js";
+import { logger } from "./logger.js";
 
 const app = express();
 app.use(express.json());
@@ -15,12 +16,17 @@ app.use(express.json());
  * cid may be "dataset:N" for PDP dataset_id.
  */
 app.post("/preflight", async (req: Request, res: Response) => {
+  const body = req.body as Record<string, unknown>;
+  const jobId = body?.job_id as string | undefined;
+  const cid = body?.cid;
+
+  logger.info("Preflight request received", { job_id: jobId, cid });
+
   try {
-    const body = req.body as Record<string, unknown>;
-    const cid = body?.cid;
     const datasetId = parseDatasetIdFromCid(cid) ?? (body?.dataset_id as number | undefined);
 
     if (datasetId == null) {
+      logger.warn("Preflight rejected: missing or invalid cid/dataset_id", { job_id: jobId });
       return res.json({
         ok: false,
         error: {
@@ -30,18 +36,27 @@ app.post("/preflight", async (req: Request, res: Response) => {
       });
     }
 
+    logger.info("Checking Docker availability", { job_id: jobId });
     const dockerCheck = await checkDockerAvailable().then(
       () => null as const,
       (err) => ({ code: "UNAVAILABLE" as const, message: err instanceof Error ? err.message : String(err) })
     );
     if (dockerCheck) {
+      logger.warn("Preflight failed: Docker not available", { job_id: jobId, error: dockerCheck.message });
       return res.json({ ok: false, error: dockerCheck });
     }
+    logger.info("Docker check passed", { job_id: jobId });
 
+    logger.info("Preflight: checking data availability", { job_id: jobId, dataset_id: datasetId });
     const result = await preflightData(datasetId);
+    if (result.ok) {
+      logger.info("Preflight succeeded", { job_id: jobId, dataset_id: datasetId });
+    } else {
+      logger.warn("Preflight failed: data not found", { job_id: jobId, dataset_id: datasetId, error: result.error?.code });
+    }
     return res.json(result);
   } catch (err) {
-    console.error("Preflight error:", err);
+    logger.error("Preflight error", { job_id: jobId, error: err instanceof Error ? err.message : String(err) });
     return res.status(500).json({
       ok: false,
       error: {
@@ -78,30 +93,51 @@ app.post("/start", async (req: Request, res: Response) => {
     !docker ||
     timeout_by == null
   ) {
+    logger.warn("Start rejected: missing required fields", { job_id: body.job_id });
     return res.status(400).json({ error: "Missing required fields" });
   }
 
   const datasetId = parseDatasetIdFromCid(cid) ?? (body.dataset_id as number | undefined);
   if (datasetId == null) {
+    logger.warn("Start rejected: cid/dataset_id not supported", { job_id: job_id });
     return res.status(400).json({
       error: "Only cid dataset:N or dataset_id supported for PDP",
     });
   }
 
+  logger.info("Start accepted, running job asynchronously", {
+    job_id: job_id,
+    attempt_id: attempt_id,
+    dataset_id: datasetId,
+    image: (docker as Record<string, unknown>)?.image,
+  });
   res.status(202).json({ accepted: true });
 
   (async () => {
+    const jobId = job_id as string;
+    const attemptId = attempt_id as string;
     try {
+      logger.info("Retrieving dataset file", { job_id: jobId, attempt_id: attemptId, dataset_id: datasetId });
       const dataFilePath = await retrieveDatasetFile(datasetId);
       if (!fs.existsSync(dataFilePath)) {
         throw new Error(`Retrieved file not found: ${dataFilePath}`);
       }
+      logger.info("Dataset file ready", { job_id: jobId, attempt_id: attemptId, data_file: dataFilePath });
 
       const dockerSpec = docker as Record<string, unknown>;
       const compReq = compute_requirements as Record<string, unknown>;
+      const image = dockerSpec.image as string;
+      logger.info("Starting Docker container", {
+        job_id: jobId,
+        attempt_id: attemptId,
+        image,
+        memory_mb: (compReq.memory_mb as number) || 512,
+        cpu_cores: (compReq.cpu_cores as number) || 1,
+        timeout_by,
+      });
       const { exitCode, stdout, stderr, wallSeconds, cpuSeconds, memoryMbPeak } =
         await runDocker({
-          image: dockerSpec.image as string,
+          image,
           command: dockerSpec.command as string[] | undefined,
           env: dockerSpec.env as Record<string, string> | undefined,
           workdir: dockerSpec.workdir as string | undefined,
@@ -112,22 +148,35 @@ app.post("/start", async (req: Request, res: Response) => {
         });
 
       const metrics = { cpuSeconds, wallSeconds, memoryMbPeak };
+      logger.info("Docker container finished", {
+        job_id: jobId,
+        attempt_id: attemptId,
+        exit_code: exitCode,
+        wall_seconds: wallSeconds.toFixed(2),
+      });
 
       if (exitCode === 0) {
         const resultCid =
           "stdout:" +
           crypto.createHash("sha256").update(stdout).digest("hex").slice(0, 16);
+        logger.info("Sending SUCCESS to Core", { job_id: jobId, attempt_id: attemptId, result_cid: resultCid });
         await sendComplete({
-          jobId: job_id as string,
-          attemptId: attempt_id as string,
+          jobId,
+          attemptId,
           status: "SUCCESS",
           metrics,
           resultCid,
         });
+        logger.info("Job completed successfully", { job_id: jobId, attempt_id: attemptId });
       } else {
+        logger.warn("Container exited with error, sending CONTAINER_ERROR to Core", {
+          job_id: jobId,
+          attempt_id: attemptId,
+          exit_code: exitCode,
+        });
         await sendComplete({
-          jobId: job_id as string,
-          attemptId: attempt_id as string,
+          jobId,
+          attemptId,
           status: "CONTAINER_ERROR",
           metrics,
           error: {
@@ -136,13 +185,18 @@ app.post("/start", async (req: Request, res: Response) => {
             logsTail: (stderr || stdout).slice(-8192),
           },
         });
+        logger.info("Job reported as CONTAINER_ERROR", { job_id: jobId, attempt_id: attemptId });
       }
     } catch (err) {
-      console.error("Start/run error:", err);
+      logger.error("Start/run error", {
+        job_id: jobId,
+        attempt_id: attemptId,
+        error: err instanceof Error ? err.message : String(err),
+      });
       try {
         await sendComplete({
-          jobId: job_id as string,
-          attemptId: attempt_id as string,
+          jobId,
+          attemptId,
           status: "CONTAINER_ERROR",
           metrics: { cpuSeconds: 0, wallSeconds: 0, memoryMbPeak: 0 },
           error: {
@@ -151,8 +205,13 @@ app.post("/start", async (req: Request, res: Response) => {
             logsTail: "",
           },
         });
+        logger.info("Sent CONTAINER_ERROR to Core after run failure", { job_id: jobId, attempt_id: attemptId });
       } catch (e) {
-        console.error("Failed to send CONTAINER_ERROR to Core:", e);
+        logger.error("Failed to send CONTAINER_ERROR to Core", {
+          job_id: jobId,
+          attempt_id: attemptId,
+          error: e instanceof Error ? e.message : String(e),
+        });
       }
     }
   })();
@@ -164,5 +223,5 @@ app.get("/health", (_req: Request, res: Response) => {
 
 const port = Number(process.env.PORT) || 4000;
 app.listen(port, () => {
-  console.log(`Node agent listening on http://localhost:${port}`);
+  logger.info("Node agent started", { port, url: `http://localhost:${port}` });
 });

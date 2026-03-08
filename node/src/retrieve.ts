@@ -2,6 +2,7 @@ import { execFile } from "child_process";
 import { promisify } from "util";
 import path from "path";
 import { RETRIEVE_SCRIPT_PATH, RETRIEVE_OUTPUT_DIR } from "./config.js";
+import { logger } from "./logger.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -18,11 +19,14 @@ export async function retrieveDatasetFile(datasetId: number): Promise<string> {
   const scriptPath = path.isAbsolute(RETRIEVE_SCRIPT_PATH)
     ? RETRIEVE_SCRIPT_PATH
     : path.resolve(process.cwd(), RETRIEVE_SCRIPT_PATH);
+  logger.debug("Running retrieve script", { script_path: scriptPath, dataset_id: datasetId });
   const { stderr } = await execFileAsync("bash", [scriptPath, String(datasetId)], {
     maxBuffer: 64 * 1024,
   });
-  if (stderr) console.error("[retrieve stderr]", stderr);
-  return path.join(RETRIEVE_OUTPUT_DIR, `dataset-${datasetId}.dat`);
+  if (stderr) logger.debug("Retrieve script stderr", { dataset_id: datasetId, stderr: stderr.slice(0, 500) });
+  const outPath = path.join(RETRIEVE_OUTPUT_DIR, `dataset-${datasetId}.dat`);
+  logger.debug("Retrieve script completed", { dataset_id: datasetId, output_path: outPath });
+  return outPath;
 }
 
 /**

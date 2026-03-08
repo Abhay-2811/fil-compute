@@ -2,6 +2,7 @@ import { spawn } from "child_process";
 import path from "path";
 import fs from "fs";
 import { CU_WEIGHTS, DOCKER_BIN } from "./config.js";
+import { logger } from "./logger.js";
 
 const DATA_MOUNT_PATH = "/data/input";
 
@@ -80,6 +81,14 @@ export function runDocker(opts: RunDockerOpts): Promise<RunDockerResult> {
     return Promise.reject(new Error(`Data file not found: ${dataFilePath}`));
   }
 
+  logger.debug("Spawning Docker run", {
+    image,
+    data_file: dataFilePath,
+    memory_mb: memoryMb,
+    cpus: cpuCores,
+    timeout_seconds: timeoutBySeconds,
+  });
+
   const args = [
     "run",
     "--rm",
@@ -133,8 +142,14 @@ export function runDocker(opts: RunDockerOpts): Promise<RunDockerResult> {
       const wallSeconds = (Date.now() - startWall) / 1000;
       const cpuSeconds = wallSeconds * Math.min(cpuCores, 1);
       const memoryMbPeak = memoryMb;
+      const finalExitCode = exitCode ?? (signal === "SIGKILL" ? 137 : 1);
+      logger.debug("Docker process closed", {
+        exit_code: finalExitCode,
+        signal: signal ?? undefined,
+        wall_seconds: wallSeconds.toFixed(2),
+      });
       resolve({
-        exitCode: exitCode ?? (signal === "SIGKILL" ? 137 : 1),
+        exitCode: finalExitCode,
         stdout,
         stderr,
         wallSeconds,
