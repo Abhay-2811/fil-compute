@@ -23,7 +23,7 @@ Single env setup for the node provider; retrieval uses DB + Curio paths only (no
 | `DB_NAME` | Database name | `yugabyte` |
 | `DB_PASSWORD` | DB password (optional; empty for peer auth) | — |
 | `CURIO_DATA_DIR` | Root of Curio piece files; piece path = `CURIO_DATA_DIR/piece/s-t00-<piece_ref>` | `/mnt/data` |
-| `RETRIEVE_OUTPUT_DIR` | Dir where the node writes extracted `.dat` files | `/tmp/curio-retrieved` |
+| `RETRIEVE_OUTPUT_DIR` | Dir where the node writes the extracted dataset file (content can be any format) | `/tmp/curio-retrieved` |
 
 ## Test without Core
 

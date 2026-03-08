@@ -16,7 +16,7 @@ export const DB_PASSWORD = process.env.DB_PASSWORD || "";
 /** Curio piece files root; piece path = CURIO_DATA_DIR/piece/s-t00-<piece_ref> */
 export const CURIO_DATA_DIR = process.env.CURIO_DATA_DIR || "/mnt/data";
 
-/** Where to write extracted dataset .dat files */
+/** Where to write extracted dataset files (content can be any format) */
 export const RETRIEVE_OUTPUT_DIR =
   process.env.RETRIEVE_OUTPUT_DIR || "/tmp/curio-retrieved";
 

@@ -66,7 +66,7 @@ export async function resolveDataset(datasetId: number): Promise<ResolvedDataset
 }
 
 /**
- * Resolve dataset, read piece file, write first rawSize bytes to output path. Returns path to .dat file.
+ * Resolve dataset, read piece file, write first rawSize bytes to output path. Returns path to the extracted file.
  */
 export async function retrieveDatasetFile(datasetId: number): Promise<string> {
   logger.debug("Resolving dataset from DB", { dataset_id: datasetId });
