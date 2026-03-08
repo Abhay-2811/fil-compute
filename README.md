@@ -10,9 +10,13 @@ Trust the node for correctness (“best effort”). Validation is out of scope.
 
 | Path | Purpose |
 |------|--------|
+| `core/` | Core API (jobs, escrow, job flow) |
+| `node/` | PDP compute node agent (preflight, start, retrieve + Docker, complete callback) |
+| `contracts/` | EVM escrow (Hardhat) |
 | `schemas/` | JSON schemas: Job, Preflight, Start, Complete, Receipt |
 | `config/` | CU model v0 (weights, formula) |
 | `docs/` | State machine, idempotency, error taxonomy |
+| `scripts/` | PDP retrieve script, etc. |
 
 ## Milestones
 
@@ -36,3 +40,7 @@ Trust the node for correctness (“best effort”). Validation is out of scope.
 - Job state on-chain: which fields (job_id, nodeid, max_cost_cu, etc.) to store at lock time.
 - Result storage: PDP deal vs shared store.
 - How `nodeid` maps to network address + transport (HTTP/gRPC/libp2p).
+
+## PDP compute (node agent)
+
+For jobs whose data lives on a PDP node, use **cid** `dataset:N` (e.g. `dataset:123`) when submitting. The node agent runs [scripts/pdp-node-data-retrieve.sh](scripts/pdp-node-data-retrieve.sh), mounts the unsealed file at `/data/input` in the container, and reports completion to Core. See [node/README.md](node/README.md).
