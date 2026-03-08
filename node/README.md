@@ -1,12 +1,14 @@
 # PDP compute node agent
 
-Runs on the same server as the PDP node (Curio + Yugabyte). Accepts Core's preflight/start, retrieves unsealed data via `pdp-node-data-retrieve.sh`, runs user compute in Docker with that data mounted at `/data/input`, and reports completion to Core.
+Runs on the same server as the PDP node (Curio + Yugabyte). Accepts Core's preflight/start, retrieves unsealed data **in-process** (no external script or ysqlsh), runs user compute in Docker with that data mounted at `/data/input`, and reports completion to Core.
 
 ## Data identity
 
-- Use **cid** in job submit as `dataset:N` (e.g. `dataset:123`) so the node looks up dataset by ID and runs the retrieve script. No Core API change required.
+- Use **cid** in job submit as `dataset:N` (e.g. `dataset:123`) so the node looks up dataset by ID and performs retrieval. No Core API change required.
 
 ## Env
+
+Single env setup for the node provider; retrieval uses DB + Curio paths only (no script path, no ysqlsh).
 
 | Variable | Description | Default |
 |----------|-------------|---------|
@@ -15,8 +17,13 @@ Runs on the same server as the PDP node (Curio + Yugabyte). Accepts Core's prefl
 | `SKIP_CORE_CALLBACK` | If `1` or `true`, log complete payload instead of POSTing to Core (for standalone testing) | — |
 | `LOG_LEVEL` | Log level: `error`, `warn`, `info`, `debug` (default `info`) | `info` |
 | `DOCKER_BIN` | Docker binary (use full path if `docker` is not in PATH when the process runs, e.g. `/usr/bin/docker`) | `docker` |
-| `RETRIEVE_SCRIPT_PATH` | Path to `pdp-node-data-retrieve.sh` | `scripts/pdp-node-data-retrieve.sh` (relative to cwd) |
-| `RETRIEVE_OUTPUT_DIR` | Dir where retrieve script writes `.dat` files (must match script’s OUTPUT_DIR) | `/tmp/curio-retrieved` |
+| `DB_HOST` | Yugabyte/Postgres host | `127.0.0.1` |
+| `DB_PORT` | Yugabyte/Postgres port | `5433` |
+| `DB_USER` | DB user | `yugabyte` |
+| `DB_NAME` | Database name | `yugabyte` |
+| `DB_PASSWORD` | DB password (optional; empty for peer auth) | — |
+| `CURIO_DATA_DIR` | Root of Curio piece files; piece path = `CURIO_DATA_DIR/piece/s-t00-<piece_ref>` | `/mnt/data` |
+| `RETRIEVE_OUTPUT_DIR` | Dir where the node writes extracted `.dat` files | `/tmp/curio-retrieved` |
 
 ## Test without Core
 
@@ -39,7 +46,7 @@ Run the node standalone so you can exercise preflight + start + retrieve + Docke
    NODE_URL=http://localhost:4000 node scripts/test-node-standalone.mjs 123
    ```
 
-   The script hits `GET /health`, `POST /preflight`, then `POST /start`. The node runs the retrieve script, runs Docker with the data mounted at `/data/input`, and prints the complete payload to stdout (because `SKIP_CORE_CALLBACK=1`).
+   The test script hits `GET /health`, `POST /preflight`, then `POST /start`. The node performs in-process retrieval, runs Docker with the data mounted at `/data/input`, and prints the complete payload to stdout (because `SKIP_CORE_CALLBACK=1`).
 
 3. **Manual curl** (optional):
 
@@ -68,26 +75,11 @@ npm install
 CORE_URL=http://localhost:3000 PORT=4000 npm run dev
 ```
 
-Run from **repo root** if you rely on default `RETRIEVE_SCRIPT_PATH` so that `scripts/pdp-node-data-retrieve.sh` resolves:
-
-```bash
-cd /path/to/datazenv2
-RETRIEVE_SCRIPT_PATH="$(pwd)/scripts/pdp-node-data-retrieve.sh" node node/dist/index.js
-```
-
-Or from `node/` with explicit script path:
-
-```bash
-cd node
-RETRIEVE_SCRIPT_PATH=/path/to/datazenv2/scripts/pdp-node-data-retrieve.sh npm start
-```
+For local runs with a real PDP, set `DB_*` and `CURIO_DATA_DIR` so the node can resolve datasets and read piece files (e.g. `DB_HOST=localhost CURIO_DATA_DIR=/mnt/data npm start`).
 
 ## Deploy on PDP server
 
-1. Copy onto the PDP server (where Curio data and Yugabyte run):
-   - `node/` (this directory and its files)
-   - `scripts/pdp-node-data-retrieve.sh`
-   - Ensure the script’s config (YSQLSH, DB_*, CURIO_DATA_DIR, OUTPUT_DIR) matches the server (or set them before running the script).
+1. Copy `node/` (this directory and its files) onto the PDP server where Curio data and Yugabyte run. No separate script is required; the node performs retrieval in-process using DB and `CURIO_DATA_DIR`.
 
 2. On the server, install Node 18+ and run:
 
@@ -97,7 +89,12 @@ RETRIEVE_SCRIPT_PATH=/path/to/datazenv2/scripts/pdp-node-data-retrieve.sh npm st
    npm run build
    export CORE_URL=https://your-core-url
    export PORT=4000
-   export RETRIEVE_SCRIPT_PATH=/path/to/repo/scripts/pdp-node-data-retrieve.sh
+   export DB_HOST=127.0.0.1
+   export DB_PORT=5433
+   export DB_USER=yugabyte
+   export DB_NAME=yugabyte
+   export DB_PASSWORD=     
+   export CURIO_DATA_DIR=/mnt/data
    export RETRIEVE_OUTPUT_DIR=/tmp/curio-retrieved
    npm start
    ```

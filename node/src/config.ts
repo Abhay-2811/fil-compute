@@ -1,16 +1,22 @@
 /**
  * Node agent config from env.
- * CORE_URL: Core API base (for complete callback)
- * PORT: HTTP listen port (default 4000)
- * SKIP_CORE_CALLBACK: if set (e.g. "1"), log complete payload instead of POSTing to Core (for standalone testing)
- * RETRIEVE_SCRIPT_PATH: path to pdp-node-data-retrieve.sh
- * RETRIEVE_OUTPUT_DIR: where script writes files (default /tmp/curio-retrieved)
+ * Single env setup: no external script; node uses DB + CURIO_DATA_DIR for retrieval.
  */
 export const CORE_URL = process.env.CORE_URL || "http://localhost:3000";
 export const PORT = Number(process.env.PORT) || 4000;
 export const SKIP_CORE_CALLBACK = process.env.SKIP_CORE_CALLBACK === "1" || process.env.SKIP_CORE_CALLBACK === "true";
-export const RETRIEVE_SCRIPT_PATH =
-  process.env.RETRIEVE_SCRIPT_PATH || "scripts/pdp-node-data-retrieve.sh";
+
+/** Yugabyte/Postgres for resolving dataset_id to piece_ref + raw_size */
+export const DB_HOST = process.env.DB_HOST || "127.0.0.1";
+export const DB_PORT = Number(process.env.DB_PORT) || 5433;
+export const DB_USER = process.env.DB_USER || "yugabyte";
+export const DB_NAME = process.env.DB_NAME || "yugabyte";
+export const DB_PASSWORD = process.env.DB_PASSWORD || "";
+
+/** Curio piece files root; piece path = CURIO_DATA_DIR/piece/s-t00-<piece_ref> */
+export const CURIO_DATA_DIR = process.env.CURIO_DATA_DIR || "/mnt/data";
+
+/** Where to write extracted dataset .dat files */
 export const RETRIEVE_OUTPUT_DIR =
   process.env.RETRIEVE_OUTPUT_DIR || "/tmp/curio-retrieved";
 
