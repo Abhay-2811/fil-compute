@@ -24,10 +24,11 @@ export const RETRIEVE_OUTPUT_DIR =
 export const DOCKER_BIN = process.env.DOCKER_BIN || "docker";
 
 /** Output upload: "self" (node serves at GET /output/:job_id), "s3" (stub), "none" (default) */
-export const OUTPUT_UPLOAD_BACKEND = (process.env.OUTPUT_UPLOAD_BACKEND || "none") as "self" | "s3" | "none";
+const _rawBackend = (process.env.OUTPUT_UPLOAD_BACKEND || "none").trim().toLowerCase();
+export const OUTPUT_UPLOAD_BACKEND = (_rawBackend === "self" || _rawBackend === "s3" ? _rawBackend : "none") as "self" | "s3" | "none";
 
 /** Base URL of this node (e.g. https://compute.example.com:4000). Required when OUTPUT_UPLOAD_BACKEND is "self". */
-export const NODE_PUBLIC_URL = process.env.NODE_PUBLIC_URL || "";
+export const NODE_PUBLIC_URL = (process.env.NODE_PUBLIC_URL || "").trim();
 
 /** CU weights (v0). Match config/cu-model-v0.json */
 export const CU_WEIGHTS = {

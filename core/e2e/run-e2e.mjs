@@ -147,7 +147,13 @@ async function run() {
   if (!job.result_cid) throw new Error("Job SUCCEEDED but missing result_cid");
 
   console.log("E2E passed: job", jobId, "SUCCEEDED, result_cid:", job.result_cid);
-  if (job.result_url) console.log("  result_url:", job.result_url);
+  if (job.result_url) {
+    console.log("  result_url:", job.result_url);
+    const resultRes = await fetch(job.result_url);
+    if (!resultRes.ok) throw new Error(`result_url fetch failed: ${resultRes.status} ${await resultRes.text().then((t) => t.slice(0, 200))}`);
+    const resultText = await resultRes.text();
+    console.log("  result body (first 200 chars):", resultText.slice(0, 200));
+  }
 }
 
 run().catch((err) => {

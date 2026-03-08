@@ -1,7 +1,7 @@
 import express, { type Request, type Response } from "express";
 import fs from "fs";
 import crypto from "crypto";
-import { parseDatasetIdFromCid } from "./config.js";
+import { parseDatasetIdFromCid, OUTPUT_UPLOAD_BACKEND, NODE_PUBLIC_URL } from "./config.js";
 import { preflightData, retrieveDatasetFile } from "./retrieve.js";
 import { runDocker, checkDockerAvailable } from "./docker-runner.js";
 import { sendComplete } from "./complete-callback.js";
@@ -244,5 +244,10 @@ app.get("/output/:job_id", (req: Request, res: Response) => {
 
 const port = Number(process.env.PORT) || 4000;
 app.listen(port, () => {
-  logger.info("Node agent started", { port, url: `http://localhost:${port}` });
+  logger.info("Node agent started", {
+    port,
+    url: `http://localhost:${port}`,
+    output_upload_backend: OUTPUT_UPLOAD_BACKEND,
+    result_url_configured: OUTPUT_UPLOAD_BACKEND === "self" ? !!NODE_PUBLIC_URL : undefined,
+  });
 });
