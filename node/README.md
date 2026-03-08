@@ -24,6 +24,21 @@ Single env setup for the node provider; retrieval uses DB + Curio paths only (no
 | `DB_PASSWORD` | DB password (optional; empty for peer auth) | — |
 | `CURIO_DATA_DIR` | Root of Curio piece files; piece path = `CURIO_DATA_DIR/piece/s-t00-<piece_ref>` | `/mnt/data` |
 | `RETRIEVE_OUTPUT_DIR` | Dir where the node writes the extracted dataset file (content can be any format) | `/tmp/curio-retrieved` |
+| `OUTPUT_UPLOAD_BACKEND` | Where to expose job result: `self` (node serves at GET /output/:job_id), `s3` (stub, not implemented), `none` (default) | `none` |
+| `NODE_PUBLIC_URL` | Base URL of this node (e.g. `https://compute.example.com:4000`). Required when `OUTPUT_UPLOAD_BACKEND=self` so the node can send `result_url` to Core | — |
+
+When `OUTPUT_UPLOAD_BACKEND=self`, the node stores job stdout in memory and serves it at **GET /output/:job_id** (plain text). It sends that URL to Core as `result_url` in the complete callback; Core returns `result_url` on **GET /jobs/:id** so users can fetch the result from Core or directly from the node.
+
+## Where to configure domains (no hardcoding)
+
+Configure via environment variables only.
+
+| Domain / role | Where to set | Env variable(s) |
+|---------------|--------------|------------------|
+| **Compute node** (this agent, e.g. `https://compute.example.com`) | On the **node** server | `NODE_PUBLIC_URL=https://compute.example.com` (so `result_url` and GET /output/:id use this). |
+| **Compute node** (so Core can call preflight/start) | On the **Core** server | `NODES={"node-001":"https://compute.example.com"}` (or your nodeid and URL). |
+| **PDP server** (Curio + Yugabyte, e.g. `pdp.example.com`) | On the **node** server | `DB_HOST=pdp.example.com` (and optionally `DB_PORT`, `DB_USER`, etc.) if the DB lives on the PDP host. `CURIO_DATA_DIR` is a **local path** on the machine where the node runs (e.g. `/mnt/data`); if the node and PDP are on the same host, that path is local; if different, you need the node to have access to that path (e.g. NFS). |
+| **Core API** (for complete callback) | On the **node** server | `CORE_URL=https://your-core-api.example.com` |
 
 ## Test without Core
 
@@ -101,7 +116,7 @@ For local runs with a real PDP, set `DB_*` and `CURIO_DATA_DIR` so the node can 
 
 3. Point Core at this node: set `NODES` (e.g. `{"node-001":"http://<server-ip>:4000"}`). If Core runs elsewhere, ensure the PDP server can reach `CORE_URL` and that the server’s port (4000) is reachable from Core (for preflight/start).
 
-4. (Optional) Run under systemd or a process manager and bind to 0.0.0.0 if needed. Nginx/domain (e.g. compute.abhayu.com) can be added later.
+4. (Optional) Run under systemd or a process manager and bind to 0.0.0.0 if needed. Put Nginx (or another reverse proxy) in front and use a public domain; set `NODE_PUBLIC_URL` to that domain (see below).
 
 ## Docker contract
 

@@ -23,6 +23,12 @@ export const RETRIEVE_OUTPUT_DIR =
 /** Docker binary (use full path if docker is not in PATH when node runs, e.g. /usr/bin/docker) */
 export const DOCKER_BIN = process.env.DOCKER_BIN || "docker";
 
+/** Output upload: "self" (node serves at GET /output/:job_id), "s3" (stub), "none" (default) */
+export const OUTPUT_UPLOAD_BACKEND = (process.env.OUTPUT_UPLOAD_BACKEND || "none") as "self" | "s3" | "none";
+
+/** Base URL of this node (e.g. https://compute.example.com:4000). Required when OUTPUT_UPLOAD_BACKEND is "self". */
+export const NODE_PUBLIC_URL = process.env.NODE_PUBLIC_URL || "";
+
 /** CU weights (v0). Match config/cu-model-v0.json */
 export const CU_WEIGHTS = {
   cpu_weight: 0.001,

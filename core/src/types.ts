@@ -49,6 +49,8 @@ export interface JobRecord {
   attempt_id?: string;
   /** Set when terminal with success/container error */
   result_cid?: string;
+  /** Optional public URL to fetch result (when node provides it) */
+  result_url?: string;
   cu_used?: number;
   receipt?: Record<string, unknown>;
   /** Set when terminal with failure */
@@ -65,6 +67,7 @@ export interface CompleteBody {
   metrics: { wall_seconds: number; cpu_seconds: number; memory_mb_peak: number };
   cu_used: number;
   result_cid?: string;
+  result_url?: string;
   error?: { exit_code?: number; message?: string; logs_tail?: string };
   signature?: string;
 }
@@ -74,6 +77,7 @@ export interface JobResource {
   job_id: string;
   status: JobStatus;
   result_cid?: string;
+  result_url?: string;
   cu_used?: number;
   receipt?: Record<string, unknown>;
   error?: { type: string; message: string };

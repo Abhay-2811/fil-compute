@@ -10,6 +10,7 @@ export interface CompletePayload {
   status: "SUCCESS" | "CONTAINER_ERROR";
   metrics?: CuMetrics;
   resultCid?: string;
+  resultUrl?: string;
   error?: {
     exitCode: number;
     message?: string;
@@ -21,7 +22,7 @@ export interface CompletePayload {
  * POST to Core /jobs/:job_id/complete with status, metrics, cu_used, result_cid or error.
  */
 export async function sendComplete(payload: CompletePayload): Promise<void> {
-  const { jobId, attemptId, status, metrics, resultCid, error } = payload;
+  const { jobId, attemptId, status, metrics, resultCid, resultUrl, error } = payload;
   const cpuSeconds = metrics?.cpuSeconds ?? 0;
   const wallSeconds = metrics?.wallSeconds ?? 0;
   const memoryMbPeak = metrics?.memoryMbPeak ?? 0;
@@ -46,6 +47,9 @@ export async function sendComplete(payload: CompletePayload): Promise<void> {
   };
   if (status === "SUCCESS" && resultCid) {
     body.result_cid = resultCid;
+  }
+  if (status === "SUCCESS" && resultUrl) {
+    body.result_url = resultUrl;
   }
   if (status === "CONTAINER_ERROR" && error) {
     body.error = {

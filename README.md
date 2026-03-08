@@ -17,6 +17,7 @@ Trust the node for correctness (“best effort”). Validation is out of scope.
 | `config/` | CU model v0 (weights, formula) |
 | `docs/` | State machine, idempotency, error taxonomy |
 | `scripts/` | PDP retrieve script, etc. |
+| `core/e2e/` | E2E test: client → Core → Node → Core → client (memory escrow, mock node) |
 
 ## Milestones
 

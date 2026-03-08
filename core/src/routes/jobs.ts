@@ -17,6 +17,7 @@ function toResource(record: JobRecord): JobResource {
     updated_at: record.updated_at,
   };
   if (record.result_cid != null) r.result_cid = record.result_cid;
+  if (record.result_url != null) r.result_url = record.result_url;
   if (record.cu_used != null) r.cu_used = record.cu_used;
   if (record.receipt != null) r.receipt = record.receipt;
   if (record.error != null) r.error = record.error;
@@ -158,6 +159,7 @@ router.post("/:job_id/complete", async (req: Request, res: Response) => {
   if (complete.status === "SUCCESS") {
     store.updateJobStatus(job_id, "SUCCEEDED", {
       result_cid: complete.result_cid,
+      result_url: complete.result_url,
       cu_used: complete.cu_used,
       receipt: {
         job_id: complete.job_id,

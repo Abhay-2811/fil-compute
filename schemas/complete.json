@@ -27,6 +27,10 @@
       "type": "string",
       "description": "Required when status is SUCCESS; result stored somewhere, CID returned"
     },
+    "result_url": {
+      "type": "string",
+      "description": "Optional public URL to fetch result (when node provides it)"
+    },
     "error": {
       "type": "object",
       "description": "Present when status is CONTAINER_ERROR",

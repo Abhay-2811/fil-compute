@@ -3,8 +3,10 @@ import fs from "fs";
 import crypto from "crypto";
 import { parseDatasetIdFromCid } from "./config.js";
 import { preflightData, retrieveDatasetFile } from "./retrieve.js";
-import { runDocker, computeCuUsed, checkDockerAvailable } from "./docker-runner.js";
+import { runDocker, checkDockerAvailable } from "./docker-runner.js";
 import { sendComplete } from "./complete-callback.js";
+import { uploadOutput } from "./output-upload.js";
+import { getOutput } from "./output-store.js";
 import { logger } from "./logger.js";
 
 const app = express();
@@ -38,7 +40,7 @@ app.post("/preflight", async (req: Request, res: Response) => {
 
     logger.info("Checking Docker availability", { job_id: jobId });
     const dockerCheck = await checkDockerAvailable().then(
-      () => null as const,
+      () => ({ code: "UNAVAILABLE" as const, message: "Docker not available" }) as const,
       (err) => ({ code: "UNAVAILABLE" as const, message: err instanceof Error ? err.message : String(err) })
     );
     if (dockerCheck) {
@@ -66,6 +68,8 @@ app.post("/preflight", async (req: Request, res: Response) => {
     });
   }
 });
+
+// client (code) -> core api ( almost there ) -> node api -> core api -> client  
 
 /**
  * POST /start
@@ -159,13 +163,20 @@ app.post("/start", async (req: Request, res: Response) => {
         const resultCid =
           "stdout:" +
           crypto.createHash("sha256").update(stdout).digest("hex").slice(0, 16);
-        logger.info("Sending SUCCESS to Core", { job_id: jobId, attempt_id: attemptId, result_cid: resultCid });
+        const uploadResult = await uploadOutput(jobId, stdout, stderr);
+        logger.info("Sending SUCCESS to Core", {
+          job_id: jobId,
+          attempt_id: attemptId,
+          result_cid: resultCid,
+          result_url: uploadResult?.url,
+        });
         await sendComplete({
           jobId,
           attemptId,
           status: "SUCCESS",
           metrics,
           resultCid,
+          resultUrl: uploadResult?.url,
         });
         logger.info("Job completed successfully", { job_id: jobId, attempt_id: attemptId });
       } else {
@@ -219,6 +230,16 @@ app.post("/start", async (req: Request, res: Response) => {
 
 app.get("/health", (_req: Request, res: Response) => {
   res.json({ status: "ok" });
+});
+
+/** GET /output/:job_id — serve stored job stdout (when OUTPUT_UPLOAD_BACKEND=self) */
+app.get("/output/:job_id", (req: Request, res: Response) => {
+  const jobId = req.params.job_id;
+  const entry = getOutput(jobId);
+  if (!entry) {
+    return res.status(404).json({ error: "NOT_FOUND", message: "Job output not found or expired" });
+  }
+  res.type("text/plain").send(entry.stdout);
 });
 
 const port = Number(process.env.PORT) || 4000;

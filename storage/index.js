@@ -22,7 +22,7 @@ const walletClient = createWalletClient({
 const provider = await getPDPProvider(publicClient, { providerId: 22n })
 
 // 2. Calculate PieceCID and upload data
-const data = new Uint8Array(fs.readFileSync("output.dat"))
+const data = new Uint8Array(fs.readFileSync("test.txt"))
 const pieceCid = piece.calculate(data)
 const size = piece.getSize(pieceCid)
 console.log(size) // size of the piece in bytes
