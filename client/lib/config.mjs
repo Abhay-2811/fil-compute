@@ -1,9 +1,23 @@
 const CORE_URL = (process.env.CORE_URL || "http://localhost:3000").replace(/\/$/, "");
-const ESCROW_RPC_URL = process.env.ESCROW_RPC_URL || "";
-const ESCROW_CONTRACT_ADDRESS = process.env.ESCROW_CONTRACT_ADDRESS || "";
-const CU_TO_WEI = Number(process.env.ESCROW_CU_TO_WEI) || 1e12;
 
-export { CORE_URL, ESCROW_RPC_URL, ESCROW_CONTRACT_ADDRESS, CU_TO_WEI };
+/** Default CU→wei scale when Core does not return it (e.g. memory escrow). */
+const DEFAULT_CU_TO_WEI = 1e12;
+
+/**
+ * Fetch escrow config from Core. Returns { rpcUrl, contractAddress, cuToWei } when Core uses EVM escrow; otherwise null/partial.
+ */
+export async function getEscrowConfigFromCore(coreUrl) {
+  const base = typeof coreUrl === "string" ? coreUrl.replace(/\/$/, "") : CORE_URL;
+  const r = await fetch(`${base}/config`);
+  if (!r.ok) throw new Error(`Failed to fetch config: ${r.status} ${await r.text()}`);
+  const j = await r.json();
+  const rpc = j.escrow_rpc_url;
+  const contract = j.escrow_contract_address;
+  const cuToWei = typeof j.escrow_cu_to_wei === "number" ? j.escrow_cu_to_wei : DEFAULT_CU_TO_WEI;
+  return { rpcUrl: rpc || null, contractAddress: contract || null, cuToWei };
+}
+
+export { CORE_URL, DEFAULT_CU_TO_WEI as CU_TO_WEI };
 
 export async function getAddressFromPrivateKey(privateKey) {
   const { Wallet } = await import("ethers");

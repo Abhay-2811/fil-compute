@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 /**
  * fil-compute CLI: escrow deposit/balance, run job from YAML.
- * Env: CORE_URL, ESCROW_RPC_URL, ESCROW_CONTRACT_ADDRESS, ESCROW_CU_TO_WEI (optional, default 1e12).
+ * Only Core URL is required (env CORE_URL or --core-url). Escrow RPC and contract come from Core GET /config.
  */
+import "dotenv/config";
 import { Command } from "commander";
 import { depositCmd } from "../lib/deposit.mjs";
 import { balanceCmd } from "../lib/balance.mjs";

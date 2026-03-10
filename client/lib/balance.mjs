@@ -1,11 +1,12 @@
 import { Command } from "commander";
-import { CORE_URL, ESCROW_RPC_URL, ESCROW_CONTRACT_ADDRESS, CU_TO_WEI } from "./config.mjs";
+import { CORE_URL, getEscrowConfigFromCore, getBalanceFromCore } from "./config.mjs";
 
 function balanceCmd() {
   const cmd = new Command("balance")
-    .description("Check escrow balance (Core GET /balance or contract)")
+    .description("Check escrow balance (from Core); uses contract when Core has EVM escrow")
     .option("--address <0x...>", "Wallet address")
     .option("--private-key <key>", "Derive address from key")
+    .option("--core-url <url>", "Core API URL", CORE_URL)
     .action(async (opts) => {
       let address = opts.address;
       if (opts.privateKey) {
@@ -16,17 +17,24 @@ function balanceCmd() {
         console.error("Error: provide --address (0x...) or --private-key");
         process.exit(1);
       }
-      if (ESCROW_RPC_URL && ESCROW_CONTRACT_ADDRESS && address.startsWith("0x")) {
+      const coreUrl = (opts.coreUrl || CORE_URL).replace(/\/$/, "");
+      let escrowConfig;
+      try {
+        escrowConfig = await getEscrowConfigFromCore(coreUrl);
+      } catch (e) {
+        console.error("Error: could not fetch config from Core:", e.message || e);
+        process.exit(1);
+      }
+      if (escrowConfig.rpcUrl && escrowConfig.contractAddress && address.startsWith("0x")) {
         const { Contract, JsonRpcProvider } = await import("ethers");
-        const provider = new JsonRpcProvider(ESCROW_RPC_URL);
-        const contract = new Contract(ESCROW_CONTRACT_ADDRESS, ["function balanceOf(address) view returns (uint256)"], provider);
+        const provider = new JsonRpcProvider(escrowConfig.rpcUrl);
+        const contract = new Contract(escrowConfig.contractAddress, ["function balanceOf(address) view returns (uint256)"], provider);
         const wei = await contract.balanceOf(address);
-        const cu = Number(wei) / CU_TO_WEI;
+        const cu = Number(wei) / escrowConfig.cuToWei;
         console.log("Balance (wei):", wei.toString());
         console.log("Balance (CU):", cu);
       } else {
-        const { getBalanceFromCore } = await import("./config.mjs");
-        const cu = await getBalanceFromCore(CORE_URL, address);
+        const cu = await getBalanceFromCore(coreUrl, address);
         console.log("Balance (CU):", cu);
       }
     });
