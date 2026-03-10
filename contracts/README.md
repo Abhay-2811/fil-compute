@@ -1,6 +1,6 @@
 # JobEscrow contract
 
-Minimal EVM escrow for datatzen jobs. Spec: [docs/evm-escrow-spec.md](../docs/evm-escrow-spec.md).
+EVM escrow for datatzen jobs. **Balance-based:** clients `deposit()`; Core (signer) calls `settleSuccess(user, jobId, attemptId, cuUsed, nodePayout)` when a job succeeds. Constructor takes signer address (Core’s escrow signer). Spec: [docs/evm-escrow-spec.md](../docs/evm-escrow-spec.md).
 
 ## Build and deploy
 
@@ -23,12 +23,12 @@ In another terminal, from `contracts/`:
 npm run deploy:local
 ```
 
-Use the printed contract address and `http://127.0.0.1:8545` as `ESCROW_RPC_URL` in Core.
+Deploy script passes deployer address as signer. Use the printed contract address and `http://127.0.0.1:8545` as `ESCROW_RPC_URL` in Core.
 
 ### Filecoin Calibration testnet
 
 1. Get tFIL from a [Calibration faucet](https://faucet.calibration.fildev.network/) (or similar) into an address you control.
-2. Set env (same key will deploy and act as Core’s escrow signer for lock/settle/refund):
+2. Set env (same key will deploy and act as Core’s escrow signer for settleSuccess):
    - `PRIVATE_KEY` — hex private key (with or without `0x`) for the funded address.
    - `FILECOIN_TESTNET_RPC_URL` — your RPC URL (optional; defaults to public Calibration RPC).
 3. Deploy:
@@ -39,13 +39,13 @@ Use the printed contract address and `http://127.0.0.1:8545` as `ESCROW_RPC_URL`
    - `ESCROW_PROVIDER=evm`
    - `ESCROW_RPC_URL` — same Filecoin testnet RPC URL.
    - `ESCROW_CONTRACT_ADDRESS` — address printed by deploy.
-   - `ESCROW_SIGNER_PRIVATE_KEY` — same private key (Core uses it to lock and settle).
+   - `ESCROW_SIGNER_PRIVATE_KEY` — same private key (Core uses it to sign settleSuccess).
    - `NODES` — must include a **payout address** per node so the contract can pay the node on success, e.g.:
      ```json
      {"node-001":{"url":"https://compute.example.com","payout_address":"0xYourNodeWalletAddress"}}
      ```
      Or set `NODE_PAYOUT_ADDRESSES` as JSON: `{"node-001":"0x..."}`.
-5. Ensure the signer address has enough tFIL to cover `max_cost_cu` for each job (CU is converted to wei using `ESCROW_CU_TO_WEI`, default 1e12).
+5. Clients add funds with `deposit()` (e.g. via `fil-compute escrow deposit`); signer only deducts on job success.
 
 ### Other public testnets (e.g. Sepolia)
 

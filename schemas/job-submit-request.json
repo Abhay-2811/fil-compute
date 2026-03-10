@@ -3,10 +3,11 @@
   "$id": "https://datatzen.io/schemas/job-submit-request.json",
   "title": "JobSubmitRequest",
   "type": "object",
-  "required": ["nodeid", "cid", "compute_requirements", "docker", "timeout_by", "max_cost_cu"],
+  "required": ["nodeid", "cid", "client_address", "compute_requirements", "docker", "timeout_by", "max_cost_cu"],
   "properties": {
     "nodeid": { "type": "string" },
     "cid": { "type": "string" },
+    "client_address": { "type": "string", "pattern": "^(0x[a-fA-F0-9]{40}|default)$", "description": "Client wallet address (0x...) for escrow; use 'default' for memory escrow e2e" },
     "compute_requirements": {
       "type": "object",
       "required": ["cpu_cores", "memory_mb"],
@@ -28,6 +29,7 @@
     },
     "timeout_by": { "type": "integer", "minimum": 1 },
     "max_cost_cu": { "type": "number", "minimum": 0 },
-    "client_request_id": { "type": "string" }
+    "client_request_id": { "type": "string" },
+    "result_storage": { "type": "string", "enum": ["pdp-provider", "s3"], "description": "Hint for where to store result" }
   }
 }

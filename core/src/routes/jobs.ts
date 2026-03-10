@@ -25,7 +25,7 @@ function toResource(record: JobRecord): JobResource {
 }
 
 /** POST /jobs — submit job. Idempotent when client_request_id is provided. */
-router.post("/", (req: Request, res: Response) => {
+router.post("/", async (req: Request, res: Response) => {
   const body = req.body as unknown;
 
   if (!validateJobSubmitRequest(body)) {
@@ -37,6 +37,17 @@ router.post("/", (req: Request, res: Response) => {
   }
 
   const input = body as JobSubmitRequest;
+
+  // Balance check: client must have enough escrow balance to cover max_cost_cu
+  const balance = await Promise.resolve(escrow.getBalance(input.client_address));
+  if (typeof balance !== "number" || balance < input.max_cost_cu) {
+    return res.status(400).json({
+      error: "INSUFFICIENT_BALANCE",
+      message: "Insufficient escrow balance for max_cost_cu",
+      balance_cu: typeof balance === "number" ? balance : 0,
+      required_cu: input.max_cost_cu,
+    });
+  }
 
   // Idempotency: if we already have a job for this client_request_id, return it
   if (input.client_request_id) {
@@ -58,6 +69,7 @@ router.post("/", (req: Request, res: Response) => {
     timeout_by: input.timeout_by,
     max_cost_cu: input.max_cost_cu,
     client_request_id: input.client_request_id,
+    client_address: input.client_address,
     created_at: now,
     updated_at: now,
   };
@@ -139,21 +151,31 @@ router.post("/:job_id/complete", async (req: Request, res: Response) => {
 
   const complete = body as CompleteBody;
 
-  // Exactly-once settlement
-  const nodePayout = getNodePayoutAddress(job.nodeid) ?? undefined;
-  const settled = await Promise.resolve(
-    escrow.settleSuccess(
-      job_id,
-      complete.cu_used,
-      nodePayout,
-      complete.attempt_id
-    )
-  );
-  if (!settled) {
-    return res.status(409).json({
-      error: "ALREADY_SETTLED",
-      message: "Job already settled",
-    });
+  // Exactly-once settlement: only deduct from client balance when job SUCCEEDED
+  if (complete.status === "SUCCESS") {
+    const nodePayout = getNodePayoutAddress(job.nodeid) ?? undefined;
+    const clientAddress = job.client_address;
+    if (!clientAddress) {
+      return res.status(400).json({
+        error: "VALIDATION_ERROR",
+        message: "Job missing client_address; cannot settle",
+      });
+    }
+    const settled = await Promise.resolve(
+      escrow.settleSuccess(
+        job_id,
+        complete.cu_used,
+        nodePayout,
+        complete.attempt_id,
+        clientAddress
+      )
+    );
+    if (!settled) {
+      return res.status(409).json({
+        error: "ALREADY_SETTLED",
+        message: "Job already settled",
+      });
+    }
   }
 
   if (complete.status === "SUCCESS") {
@@ -187,6 +209,24 @@ router.post("/:job_id/complete", async (req: Request, res: Response) => {
 /** GET /jobs/:job_id — poll job status */
 router.get("/:job_id", (req: Request, res: Response) => {
   const { job_id } = req.params;
+  if (job_id === "balance") {
+    const user = req.query.user as string | undefined;
+    if (!user || (user !== "default" && !user.startsWith("0x"))) {
+      return res.status(400).json({
+        error: "VALIDATION_ERROR",
+        message: "Query 'user' required (0x address or 'default')",
+      });
+    }
+    Promise.resolve(escrow.getBalance(user))
+      .then((balance) => {
+        res.json({ balance_cu: balance });
+      })
+      .catch((err) => {
+        console.error("Balance check error:", err);
+        res.status(500).json({ error: "BALANCE_CHECK_FAILED", message: err instanceof Error ? err.message : "Unknown" });
+      });
+    return;
+  }
   const record = store.getJob(job_id);
   if (!record) {
     return res.status(404).json({ error: "NOT_FOUND", message: "Job not found" });

@@ -26,6 +26,8 @@ export interface DockerSpec {
 export interface JobSubmitRequest {
   nodeid: string;
   cid: string;
+  /** Client wallet address (0x...) for balance-based escrow; balance must be >= max_cost_cu. */
+  client_address: string;
   compute_requirements: ComputeRequirements;
   docker: DockerSpec;
   timeout_by: number;
@@ -45,6 +47,8 @@ export interface JobRecord {
   timeout_by: number;
   max_cost_cu: number;
   client_request_id?: string;
+  /** Client wallet address (for balance-based escrow settle). */
+  client_address?: string;
   /** Set when we send START to node (for COMPLETE idempotency) */
   attempt_id?: string;
   /** Set when terminal with success/container error */

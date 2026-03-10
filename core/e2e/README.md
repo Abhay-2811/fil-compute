@@ -32,6 +32,7 @@ Use your live Core API and node. Core must already have `NODES` pointing at your
 | `LIVE_CORE_URL` | Base URL of your Core API (required for live mode) | `https://core.abhayu.com` |
 | `LIVE_NODE_ID` | nodeid that Core uses for your node | `node-001` |
 | `LIVE_DATASET_ID` | dataset id for cid `dataset:N` (must exist on your PDP) | `1` |
+| `LIVE_CLIENT_ADDRESS` | Client address for escrow (0x... or `default` for memory); must have balance >= max_cost_cu | `default` or `0x...` |
 
 Run from `core/`:
 
@@ -48,4 +49,6 @@ export LIVE_DATASET_ID=1
 node e2e/run-e2e.mjs
 ```
 
+
+**Live + EVM escrow:** Core must be running with `ESCROW_PROVIDER=evm`, contract and signer env set, and `NODES` must include a **payout_address** for the node. Set `LIVE_CLIENT_ADDRESS` to an 0x address that has deposited enough CU (e.g. via `fil-compute escrow deposit`); e2e uses max_cost_cu 100.
 The job uses `cid: "dataset:<LIVE_DATASET_ID>"` and a small Docker command that reads `/data/input`; the live node must be able to resolve that dataset and run the container. Polling runs up to ~4 minutes (120 × 2s) for live runs.

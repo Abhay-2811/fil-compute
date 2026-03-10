@@ -1,0 +1,9 @@
+# Example docker-compute-job.yaml for fil-compute run
+docker:
+  image: alpine:3.18
+  command: ["sh", "-c", "wc -c < /data/input; echo done"]
+compute_requirements:
+  cpu_cores: 1
+  memory_mb: 512
+timeout_by: 120
+max_cost_cu: 100

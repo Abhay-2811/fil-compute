@@ -10,10 +10,12 @@ async function main() {
   console.log("Account balance:", (await ethers.provider.getBalance(deployer.address)).toString());
 
   const JobEscrow = await ethers.getContractFactory("JobEscrow");
-  const contract = await JobEscrow.deploy();
+  // Signer = address that Core uses (ESCROW_SIGNER_PRIVATE_KEY). Use deployer so same key can run Core.
+  const contract = await JobEscrow.deploy(deployer.address);
   await contract.waitForDeployment();
   const address = await contract.getAddress();
   console.log("JobEscrow deployed to:", address);
+  console.log("Signer (set for balance-based settle):", deployer.address);
 
   // For Core EVM adapter, set:
   // ESCROW_RPC_URL=<network rpc>

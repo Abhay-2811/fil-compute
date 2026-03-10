@@ -1,8 +1,8 @@
 import type { IEscrowProvider } from "../escrow/types.js";
 
 /**
- * In-memory escrow for v0. Single user "default".
- * Lock on PREFLIGHT success; settle on COMPLETE (charge cu_used) or refund on FAILED_NODE.
+ * In-memory escrow for v0. Supports balance-based (no lock): getBalance(userId), settleSuccess(..., userAddress) deducts from user.
+ * Legacy: lock() reserves amount; settleSuccess without userAddress uses locked entry; settleRefund returns locked amount.
  */
 const DEFAULT_USER = "default";
 const initialBalance = 100_000; // CU
@@ -14,7 +14,7 @@ export function getBalance(userId: string = DEFAULT_USER): number {
   return balance.get(userId) ?? 0;
 }
 
-/** Lock max_cost_cu for job. Returns false if insufficient balance. */
+/** Lock max_cost_cu for job (legacy). Balance-based flow uses lock as no-op (caller returns true without calling this). */
 export function lock(jobId: string, amount: number, userId: string = DEFAULT_USER): boolean {
   const available = balance.get(userId) ?? 0;
   if (amount > available) return false;
@@ -23,8 +23,20 @@ export function lock(jobId: string, amount: number, userId: string = DEFAULT_USE
   return true;
 }
 
-/** On SUCCESS or CONTAINER_ERROR: charge cu_used, release remainder. Exactly-once per job. */
-export function settleSuccess(jobId: string, cuUsed: number): boolean {
+/** On SUCCESS: charge cu_used. If userAddress provided (balance-based), deduct from that user. Else legacy: release from locked entry. */
+export function settleSuccess(
+  jobId: string,
+  cuUsed: number,
+  _nodePayout?: string,
+  _attemptId?: string,
+  userAddress?: string
+): boolean {
+  if (userAddress != null && userAddress !== "") {
+    const current = balance.get(userAddress) ?? 0;
+    if (cuUsed > current) return false;
+    balance.set(userAddress, current - cuUsed);
+    return true;
+  }
   const entry = lockedByJob.get(jobId);
   if (!entry) return false;
   lockedByJob.delete(jobId);
@@ -34,7 +46,7 @@ export function settleSuccess(jobId: string, cuUsed: number): boolean {
   return true;
 }
 
-/** On FAILED_NODE / FAILED_PREFLIGHT: full refund. Exactly-once per job. */
+/** On FAILED_NODE / FAILED_PREFLIGHT: full refund (legacy only; balance-based has no lock to refund). */
 export function settleRefund(jobId: string): boolean {
   const entry = lockedByJob.get(jobId);
   if (!entry) return false;
@@ -44,12 +56,11 @@ export function settleRefund(jobId: string): boolean {
   return true;
 }
 
-/** In-memory implementation of IEscrowProvider for local dev and tests. */
 export const memoryEscrow: IEscrowProvider = {
   getBalance: (userId = DEFAULT_USER) => getBalance(userId),
   lock: (jobId, amount, userId = DEFAULT_USER, _nodePayout?: string) =>
     lock(jobId, amount, userId),
-  settleSuccess: (jobId, cuUsed, _nodePayout?: string, _attemptId?: string) =>
-    settleSuccess(jobId, cuUsed),
+  settleSuccess: (jobId, cuUsed, nodePayout?: string, attemptId?: string, userAddress?: string) =>
+    settleSuccess(jobId, cuUsed, nodePayout, attemptId, userAddress),
   settleRefund,
 };

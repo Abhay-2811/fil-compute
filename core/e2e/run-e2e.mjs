@@ -25,6 +25,7 @@ function randomPort(min = 3000, max = 65535) {
 const LIVE_CORE_URL = process.env.LIVE_CORE_URL ? process.env.LIVE_CORE_URL.replace(/\/$/, "") : null;
 const LIVE_NODE_ID = process.env.LIVE_NODE_ID || "node-001";
 const LIVE_DATASET_ID = process.env.LIVE_DATASET_ID || "1";
+const LIVE_CLIENT_ADDRESS = process.env.LIVE_CLIENT_ADDRESS || "default";
 
 const CORE_PORT = randomPort(3000, 3100);
 const NODE_PORT = randomPort(4000, 4100);
@@ -102,6 +103,7 @@ async function run() {
   const submitBody = {
     nodeid: isLive ? LIVE_NODE_ID : "node-001",
     cid: `dataset:${isLive ? LIVE_DATASET_ID : "1"}`,
+    client_address: isLive ? LIVE_CLIENT_ADDRESS : "default",
     compute_requirements: { cpu_cores: 1, memory_mb: 512 },
     docker: { image: "alpine:3.18", command: ["sh", "-c", "cat /data/input; echo done"] },
     timeout_by: 120,

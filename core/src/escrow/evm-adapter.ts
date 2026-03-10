@@ -8,8 +8,11 @@ const SIGNER_PRIVATE_KEY = process.env.ESCROW_SIGNER_PRIVATE_KEY ?? "";
 const CU_TO_WEI = Number(process.env.ESCROW_CU_TO_WEI) || 1e12;
 
 const ABI = [
+  "function deposit() payable",
+  "function balanceOf(address user) view returns (uint256)",
+  "function settleSuccess(address user, bytes32 jobId, bytes32 attemptId, uint256 cuUsed, address nodePayout)",
   "function lock(bytes32 jobId, address nodePayout) payable",
-  "function settleSuccess(bytes32 jobId, bytes32 attemptId, uint256 cuUsed, address nodePayout)",
+  "function settleSuccessLegacy(bytes32 jobId, bytes32 attemptId, uint256 cuUsed, address nodePayout)",
   "function refund(bytes32 jobId)",
   "function locks(bytes32) view returns (address user, address nodePayout, uint256 amountCu, bool settled)",
 ];
@@ -18,71 +21,73 @@ function stringToBytes32(s: string): string {
   return keccak256(toUtf8Bytes(s));
 }
 
-function getContract() {
-  if (!RPC_URL || !CONTRACT_ADDRESS || !SIGNER_PRIVATE_KEY) {
-    throw new Error(
-      "EVM escrow requires ESCROW_RPC_URL, ESCROW_CONTRACT_ADDRESS, ESCROW_SIGNER_PRIVATE_KEY"
-    );
+function getContract(signer?: Wallet) {
+  if (!RPC_URL || !CONTRACT_ADDRESS) {
+    throw new Error("EVM escrow requires ESCROW_RPC_URL, ESCROW_CONTRACT_ADDRESS");
   }
   const provider = new JsonRpcProvider(RPC_URL);
-  const signer = new Wallet(SIGNER_PRIVATE_KEY, provider);
-  return new Contract(CONTRACT_ADDRESS, ABI, signer);
+  const s = signer ?? new Wallet(SIGNER_PRIVATE_KEY || "0x", provider);
+  return new Contract(CONTRACT_ADDRESS, ABI, s);
 }
 
-/** Get signer address for balance (v0: single relayer/signer). */
-async function getSignerAddress(): Promise<string> {
-  const provider = new JsonRpcProvider(RPC_URL);
-  const signer = new Wallet(SIGNER_PRIVATE_KEY, provider);
-  return signer.getAddress();
+function getReadOnlyContract(): Contract {
+  if (!RPC_URL || !CONTRACT_ADDRESS) {
+    throw new Error("EVM escrow requires ESCROW_RPC_URL, ESCROW_CONTRACT_ADDRESS");
+  }
+  return new Contract(CONTRACT_ADDRESS, ABI, new JsonRpcProvider(RPC_URL));
 }
 
 export const evmEscrow: IEscrowProvider = {
-  getBalance(_userId?: string): number {
-    if (!RPC_URL || !SIGNER_PRIVATE_KEY) {
+  async getBalance(userId?: string): Promise<number> {
+    if (!RPC_URL || !CONTRACT_ADDRESS) {
       throw new Error("EVM escrow not configured; use ESCROW_PROVIDER=memory");
     }
-    // Sync balance read not supported in adapter; use async or cache. For compatibility return 0 and document.
-    return 0;
+    if (!userId || !userId.startsWith("0x")) {
+      return 0;
+    }
+    const contract = getReadOnlyContract();
+    const wei = await contract.balanceOf(userId);
+    const cu = Number(wei) / CU_TO_WEI;
+    return cu;
   },
 
   async lock(
-    jobId: string,
-    amount: number,
+    _jobId: string,
+    _amount: number,
     _userId?: string,
-    nodePayout?: string
+    _nodePayout?: string
   ): Promise<boolean> {
-    if (!nodePayout || !nodePayout.startsWith("0x")) {
-      throw new Error("EVM lock requires nodePayout (address)");
-    }
-    const contract = getContract();
-    const jobIdBytes32 = stringToBytes32(jobId);
-    const valueWei = BigInt(Math.ceil(amount * CU_TO_WEI));
-    try {
-      const tx = await contract.lock(jobIdBytes32, nodePayout, { value: valueWei });
-      await tx.wait();
-      return true;
-    } catch {
-      return false;
-    }
+    // Balance-based: no per-job lock; client balance checked at submit.
+    return true;
   },
 
   async settleSuccess(
     jobId: string,
     cuUsed: number,
     nodePayout?: string,
-    attemptId?: string
+    attemptId?: string,
+    userAddress?: string
   ): Promise<boolean> {
+    if (!userAddress || !userAddress.startsWith("0x")) {
+      throw new Error("EVM settleSuccess (balance-based) requires userAddress");
+    }
     if (!nodePayout || !nodePayout.startsWith("0x")) {
       throw new Error("EVM settleSuccess requires nodePayout (address)");
     }
-    const contract = getContract();
+    if (!SIGNER_PRIVATE_KEY) {
+      throw new Error("EVM escrow requires ESCROW_SIGNER_PRIVATE_KEY for settleSuccess");
+    }
+    const provider = new JsonRpcProvider(RPC_URL);
+    const signer = new Wallet(SIGNER_PRIVATE_KEY, provider);
+    const contract = getContract(signer);
     const jobIdBytes32 = stringToBytes32(jobId);
     const attemptIdBytes32 = attemptId
       ? stringToBytes32(attemptId)
       : "0x0000000000000000000000000000000000000000000000000000000000000000";
+    const cuUsedWei = BigInt(Math.floor(cuUsed * CU_TO_WEI));
     try {
-      const cuUsedWei = BigInt(Math.floor(cuUsed * CU_TO_WEI));
       const tx = await contract.settleSuccess(
+        userAddress,
         jobIdBytes32,
         attemptIdBytes32,
         cuUsedWei,
@@ -95,15 +100,8 @@ export const evmEscrow: IEscrowProvider = {
     }
   },
 
-  async settleRefund(jobId: string): Promise<boolean> {
-    const contract = getContract();
-    const jobIdBytes32 = stringToBytes32(jobId);
-    try {
-      const tx = await contract.refund(jobIdBytes32);
-      await tx.wait();
-      return true;
-    } catch {
-      return false;
-    }
+  async settleRefund(_jobId: string): Promise<boolean> {
+    // Balance-based: nothing was locked, nothing to refund.
+    return true;
   },
 };

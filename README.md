@@ -10,9 +10,10 @@ Trust the node for correctness (“best effort”). Validation is out of scope.
 
 | Path | Purpose |
 |------|--------|
+| `client/` | CLI (`fil-compute`): escrow deposit/balance, run job from YAML; client always pays via balance-based escrow |
 | `core/` | Core API (jobs, escrow, job flow) |
 | `node/` | PDP compute node agent (preflight, start, retrieve + Docker, complete callback) |
-| `contracts/` | EVM escrow (Hardhat) |
+| `contracts/` | EVM escrow (Hardhat): balance-based deposit + signer-only settleSuccess |
 | `schemas/` | JSON schemas: Job, Preflight, Start, Complete, Receipt |
 | `config/` | CU model v0 (weights, formula) |
 | `docs/` | State machine, idempotency, error taxonomy |
@@ -33,7 +34,7 @@ Trust the node for correctness (“best effort”). Validation is out of scope.
 - **Core:** scheduler + billing + job state machine + API.
 - **Node:** a **remote server** with **storage and compute** that runs **datatzen's Node Agent** (our code). It has a public identity (`nodeid`) and, for on-chain escrow, a payout address. Core talks to it for preflight/start; the node calls Core back with COMPLETE. Trust model (v0): best-effort.
 - **CU:** compute unit = resource-weighted + time-based metering.
-- **Escrow:** lives on an **EVM-compatible chain**. User funds are locked in a contract per job; settlement (pay node, release remainder) or full refund happens on-chain. Some **job state** may be stored on-chain on a requirement basis (e.g. for audit or dispute). Core can use in-memory escrow for dev (`ESCROW_PROVIDER=memory`) or an EVM contract adapter (`ESCROW_PROVIDER=evm`).
+- **Escrow:** Balance-based: clients pre-fund (contract `deposit()`); Core (signer) only deducts on job success (`settleSuccess(user, jobId, ...)`). No per-job lock. Core can use in-memory escrow for dev (`ESCROW_PROVIDER=memory`) or EVM contract (`ESCROW_PROVIDER=evm`).
 
 ## Open questions (v0)
 
