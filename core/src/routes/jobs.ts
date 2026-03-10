@@ -98,6 +98,13 @@ router.post("/:job_id/complete", async (req: Request, res: Response) => {
     logger.warn("Complete callback: job not found", { job_id });
     return res.status(404).json({ error: "NOT_FOUND", message: "Job not found" });
   }
+  if (job.status === "SUCCEEDED") {
+    const b = body as Record<string, unknown>;
+    if (typeof b?.attempt_id === "string" && b.attempt_id === job.attempt_id) {
+      logger.debug("Complete callback idempotent (already SUCCEEDED)", { job_id });
+      return res.status(200).json({ ok: true });
+    }
+  }
   if (job.status !== "RUNNING") {
     logger.warn("Complete callback: invalid state", { job_id, status: job.status });
     return res.status(409).json({
@@ -167,7 +174,7 @@ router.post("/:job_id/complete", async (req: Request, res: Response) => {
 
   const complete = body as CompleteBody;
 
-  // Exactly-once settlement: only deduct from client balance when job SUCCEEDED
+  // Respond quickly so nginx/proxy does not timeout. For SUCCESS, do escrow settlement in background.
   if (complete.status === "SUCCESS") {
     const nodePayout = getNodePayoutAddress(job.nodeid) ?? undefined;
     const clientAddress = job.client_address;
@@ -178,26 +185,7 @@ router.post("/:job_id/complete", async (req: Request, res: Response) => {
         message: "Job missing client_address; cannot settle",
       });
     }
-    const settled = await Promise.resolve(
-      escrow.settleSuccess(
-        job_id,
-        complete.cu_used,
-        nodePayout,
-        complete.attempt_id,
-        clientAddress
-      )
-    );
-    if (!settled) {
-      logger.warn("Complete callback: already settled", { job_id });
-      return res.status(409).json({
-        error: "ALREADY_SETTLED",
-        message: "Job already settled",
-      });
-    }
-    logger.info("Escrow settled", { job_id, client_address: clientAddress, cu_used: complete.cu_used, node_payout: nodePayout });
-  }
-
-  if (complete.status === "SUCCESS") {
+    // Update job to SUCCEEDED immediately so we can respond 200 before any slow settlement.
     store.updateJobStatus(job_id, "SUCCEEDED", {
       result_cid: complete.result_cid,
       result_url: complete.result_url,
@@ -213,17 +201,33 @@ router.post("/:job_id/complete", async (req: Request, res: Response) => {
       },
     });
     logger.info("Job completed successfully", { job_id, attempt_id: complete.attempt_id, result_cid: complete.result_cid });
-  } else {
-    store.updateJobStatus(job_id, "FAILED_CONTAINER", {
-      cu_used: complete.cu_used,
-      error: {
-        type: "CONTAINER_ERROR",
-        message: complete.error?.message ?? `Exit ${complete.error?.exit_code ?? "?"}`,
-      },
-    });
-    logger.info("Job reported CONTAINER_ERROR", { job_id, attempt_id: complete.attempt_id, error: complete.error?.message });
+    // Settlement in background so the node gets 200 before blockchain confirms (avoids 504 from nginx).
+    Promise.resolve(
+      escrow.settleSuccess(
+        job_id,
+        complete.cu_used,
+        nodePayout,
+        complete.attempt_id,
+        clientAddress
+      )
+    )
+      .then((settled) => {
+        if (settled) logger.info("Escrow settled", { job_id, client_address: clientAddress, cu_used: complete.cu_used, node_payout: nodePayout });
+        else logger.warn("Escrow settle returned false (already settled?)", { job_id });
+      })
+      .catch((err) => logger.error("Escrow settlement failed", { job_id, error: err instanceof Error ? err.message : String(err) }));
+    return res.status(200).json({ ok: true });
   }
 
+  // CONTAINER_ERROR: no settlement, update and respond
+  store.updateJobStatus(job_id, "FAILED_CONTAINER", {
+    cu_used: complete.cu_used,
+    error: {
+      type: "CONTAINER_ERROR",
+      message: complete.error?.message ?? `Exit ${complete.error?.exit_code ?? "?"}`,
+    },
+  });
+  logger.info("Job reported CONTAINER_ERROR", { job_id, attempt_id: complete.attempt_id, error: complete.error?.message });
   res.status(200).json({ ok: true });
 });
 
