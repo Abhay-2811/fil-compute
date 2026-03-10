@@ -1,9 +1,25 @@
 import "dotenv/config";
 import express from "express";
 import jobsRouter from "./routes/jobs.js";
+import { logger } from "./logger.js";
 
 const app = express();
 app.use(express.json());
+
+// Request logging (method, path, status, duration)
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on("finish", () => {
+    const duration = Date.now() - start;
+    logger.info("Request", {
+      method: req.method,
+      path: req.path,
+      status: res.statusCode,
+      duration_ms: duration,
+    });
+  });
+  next();
+});
 
 app.use("/jobs", jobsRouter);
 
@@ -25,5 +41,5 @@ app.get("/health", (_req, res) => {
 
 const port = Number(process.env.PORT) || 3000;
 app.listen(port, () => {
-  console.log(`Core API listening on http://localhost:${port}`);
+  logger.info("Core API started", { port, url: `http://localhost:${port}` });
 });
