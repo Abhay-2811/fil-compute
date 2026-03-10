@@ -1,7 +1,11 @@
 import { ethers } from "hardhat";
 
 async function main() {
-  const [deployer] = await ethers.getSigners();
+  const signers = await ethers.getSigners();
+  const deployer = signers[0];
+  if (!deployer) {
+    throw new Error("No signer: set PRIVATE_KEY in .env (or env) for filecoin_calibration");
+  }
   console.log("Deploying JobEscrow with account:", deployer.address);
   console.log("Account balance:", (await ethers.provider.getBalance(deployer.address)).toString());
 

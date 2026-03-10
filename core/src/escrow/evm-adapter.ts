@@ -81,10 +81,11 @@ export const evmEscrow: IEscrowProvider = {
       ? stringToBytes32(attemptId)
       : "0x0000000000000000000000000000000000000000000000000000000000000000";
     try {
+      const cuUsedWei = BigInt(Math.floor(cuUsed * CU_TO_WEI));
       const tx = await contract.settleSuccess(
         jobIdBytes32,
         attemptIdBytes32,
-        BigInt(Math.floor(cuUsed)),
+        cuUsedWei,
         nodePayout
       );
       await tx.wait();

@@ -103,7 +103,7 @@ async function run() {
     nodeid: isLive ? LIVE_NODE_ID : "node-001",
     cid: `dataset:${isLive ? LIVE_DATASET_ID : "1"}`,
     compute_requirements: { cpu_cores: 1, memory_mb: 512 },
-    docker: { image: "alpine:3.18", command: ["sh", "-c", "wc -c < /data/input; echo done"] },
+    docker: { image: "alpine:3.18", command: ["sh", "-c", "cat /data/input; echo done"] },
     timeout_by: 120,
     max_cost_cu: 100,
   };
