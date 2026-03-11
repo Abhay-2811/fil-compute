@@ -1,0 +1,66 @@
+# ML compute: download a public dataset from URL and run a classifier.
+# Uses UCI Adult (census income, ~48k rows, 3.8 MB) by default; override with docker.env.DATASET_URL.
+# Requires any --dataset-id (job API requirement); data is fetched from URL inside the container.
+docker:
+  image: python:3.11-slim
+  env:
+    # Default: UCI Adult (income >50K classification). Other options:
+    # Wine red:   https://archive.ics.uci.edu/ml/machine-learning-databases/wine-quality/winequality-red.csv
+    # Wine white: https://archive.ics.uci.edu/ml/machine-learning-databases/wine-quality/winequality-white.csv
+    DATASET_URL: "https://archive.ics.uci.edu/ml/machine-learning-databases/adult/adult.data"
+  command:
+    - sh
+    - -c
+    - |
+      set -e
+      pip install -q --no-cache-dir pandas scikit-learn
+      python3 -c "
+      import os, urllib.request, sys, io
+      import pandas as pd
+      from sklearn.ensemble import RandomForestClassifier
+      from sklearn.model_selection import train_test_split
+      from sklearn.preprocessing import LabelEncoder
+      from sklearn.metrics import accuracy_score, classification_report
+
+      url = os.environ.get('DATASET_URL', '')
+      if not url:
+          print('Set DATASET_URL'); sys.exit(1)
+      print('Downloading', url[:60], '...')
+      with urllib.request.urlopen(url, timeout=120) as r:
+          raw = r.read().decode('utf-8', errors='replace')
+      print('Downloaded', len(raw), 'bytes')
+
+      if 'adult' in url.lower():
+          cols = ['age','workclass','fnlwgt','education','ednum','marital','occupation','relationship','race','sex','capgain','caploss','hrs','country','income']
+          df = pd.read_csv(io.StringIO(raw), header=None, names=cols, na_values=' ?')
+          df = df.dropna()
+          df['income'] = (df['income'].str.strip().str.rstrip('.') == '>50K').astype(int)
+          cat = ['workclass','education','marital','occupation','relationship','race','sex','country']
+          for c in cat:
+              df[c] = LabelEncoder().fit_transform(df[c].astype(str))
+          X = df.drop(columns=['income']); y = df['income']
+          task = 'Adult income >50K'
+      else:
+          df = pd.read_csv(io.StringIO(raw))
+          if 'quality' in df.columns:
+              y = (df['quality'] >= 6).astype(int); X = df.drop(columns=['quality'])
+              task = 'Wine quality >=6'
+          else:
+              y = df.iloc[:,-1]; X = df.iloc[:,:-1]
+              task = 'Last column'
+          obj_cols = X.select_dtypes(include=['object']).columns
+          for c in obj_cols:
+              X[c] = LabelEncoder().fit_transform(X[c].astype(str))
+      print('Task:', task, '| rows:', len(X), '| features:', X.shape[1])
+      X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+      clf = RandomForestClassifier(n_estimators=50, max_depth=10, random_state=42, n_jobs=-1)
+      clf.fit(X_train, y_train)
+      pred = clf.predict(X_test)
+      print('Accuracy:', round(accuracy_score(y_test, pred), 4))
+      print(classification_report(y_test, pred))
+      "
+compute_requirements:
+  cpu_cores: 2
+  memory_mb: 2048
+timeout_by: 300
+max_cost_cu: 500

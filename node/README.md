@@ -17,6 +17,7 @@ Single env setup for the node provider; retrieval uses DB + Curio paths only (no
 | `SKIP_CORE_CALLBACK` | If `1` or `true`, log complete payload instead of POSTing to Core (for standalone testing) | — |
 | `LOG_LEVEL` | Log level: `error`, `warn`, `info`, `debug` (default `info`) | `info` |
 | `DOCKER_BIN` | Docker binary (use full path if `docker` is not in PATH when the process runs, e.g. `/usr/bin/docker`) | `docker` |
+| `DOCKER_NETWORK` | Docker network for job containers. `default` = outbound allowed (pip install, URL fetch). Set to `none` to disable. | `default` |
 | `DB_HOST` | Yugabyte/Postgres host | `127.0.0.1` |
 | `DB_PORT` | Yugabyte/Postgres port | `5433` |
 | `DB_USER` | DB user | `yugabyte` |

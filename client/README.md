@@ -41,7 +41,58 @@ CORE_URL=http://127.0.0.1:3000 npx fil-compute run \
 
 ## Job YAML
 
-See `examples/docker-compute-job.yaml`. Required: `docker.image`; optional: `docker.command`, `compute_requirements`, `timeout_by`, `max_cost_cu` (default 100).
+- **Basic:** `examples/docker-compute-job.yaml` — minimal (e.g. `wc -c` on `/data/input`). Required: `docker.image`; optional: `docker.command`, `compute_requirements`, `timeout_by`, `max_cost_cu` (default 100).
+- **CSV compute:** `examples/docker-compute-job-csv.yaml` — Python reads CSV at `/data/input`, prints row count, columns, and numeric min/max/avg.
+- **JSON compute:** `examples/docker-compute-job-json.yaml` — Python reads JSON array, prints event counts and purchase total.
+- **ML compute:** `examples/docker-compute-job-ml.yaml` — Downloads a **large public dataset** from a URL (default: UCI Adult, ~48k rows, 3.8 MB), trains a RandomForest classifier, prints accuracy and classification report. Override `docker.env.DATASET_URL` in the YAML to use Wine Quality or another CSV (see job file comments).
+
+## Sample data and PDP upload
+
+To run compute on real data, upload a file to PDP to get a **dataset ID**, then pass that ID to `run --dataset-id <id>`.
+
+1. **Sample files** are in `../storage/sample-data/`:
+   - `sensor_readings.csv` — 15 rows (timestamp, sensor_id, value, unit)
+   - `events.json` — 8 events (login, click, purchase, logout)
+
+2. **Upload** from `storage/`:  
+   `INPUT_FILE=sample-data/sensor_readings.csv node index.js`  
+   (or `events.json`). Note the printed **dataSetId**.
+
+3. **Run compute** with that ID and the matching job file:
+   ```bash
+   npx fil-compute run --compute-provider node-001 --dataset-id <DATASET_ID> \
+     --job-file examples/docker-compute-job-csv.yaml --private-key 0x...
+   ```
+   See `storage/sample-data/README.md` for full steps.
+
+### ML job with online dataset
+
+The ML job **downloads data from a URL** inside the container (no PDP upload needed). You still pass `--dataset-id` (any valid ID; the job ignores `/data/input` and uses `DATASET_URL`).
+
+```bash
+# Default: UCI Adult (census income, ~48k rows). Needs ~2–3 min (pip install + train).
+npx fil-compute run --compute-provider node-001 --dataset-id 1 \
+  --job-file examples/docker-compute-job-ml.yaml --private-key 0x...
+```
+
+To use a different dataset, edit the job YAML and set `docker.env.DATASET_URL` to a direct CSV URL, e.g.:
+
+- **UCI Adult (default):** `https://archive.ics.uci.edu/ml/machine-learning-databases/adult/adult.data` (3.8 MB, income classification)
+- **Wine Quality red:** `https://archive.ics.uci.edu/ml/machine-learning-databases/wine-quality/winequality-red.csv`
+- **Wine Quality white:** `https://archive.ics.uci.edu/ml/machine-learning-databases/wine-quality/winequality-white.csv`
+
+If the job fails with **"Temporary failure in name resolution"** or **"No matching distribution found for pandas"**, the compute node’s Docker environment has no outbound internet or DNS (so `pip install` inside the container fails). Two options:
+
+1. **Node operator:** Enable outbound internet and DNS for containers (e.g. Docker `--dns 8.8.8.8`, or fix host firewall).
+2. **Use a pre-built image** (no pip at runtime): build the image once, push to a registry the node can pull, then run the prebuilt job:
+   ```bash
+   docker build -f examples/Dockerfile.ml -t your-registry/python-ml:3.11 .
+   docker push your-registry/python-ml:3.11
+   ```
+   Edit `examples/docker-compute-job-ml-prebuilt.yaml` and set `docker.image` to `your-registry/python-ml:3.11`, then:
+   ```bash
+   npx fil-compute run ... --job-file examples/docker-compute-job-ml-prebuilt.yaml
+   ```
 
 ## E2E
 

@@ -1,7 +1,7 @@
 import { spawn } from "child_process";
 import path from "path";
 import fs from "fs";
-import { CU_WEIGHTS, DOCKER_BIN } from "./config.js";
+import { CU_WEIGHTS, DOCKER_BIN, DOCKER_NETWORK } from "./config.js";
 import { logger } from "./logger.js";
 
 const DATA_MOUNT_PATH = "/data/input";
@@ -99,7 +99,7 @@ export function runDocker(opts: RunDockerOpts): Promise<RunDockerResult> {
     "--cpus",
     String(Math.max(0.01, cpuCores)),
     "--network",
-    "none",
+    DOCKER_NETWORK,
   ];
 
   for (const [k, v] of Object.entries(env)) {

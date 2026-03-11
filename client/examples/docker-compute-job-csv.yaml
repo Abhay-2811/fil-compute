@@ -1,0 +1,34 @@
+# Compute on a CSV dataset: read /data/input, parse CSV, print stats.
+# Use with a dataset_id that points to sensor_readings.csv (or any CSV) uploaded to PDP.
+docker:
+  image: python:3.11-slim
+  command:
+    - python3
+    - -c
+    - |
+      import csv, sys
+      from pathlib import Path
+      p = Path("/data/input")
+      if not p.exists():
+          print("ERROR: /data/input not found"); sys.exit(1)
+      text = p.read_text()
+      rows = list(csv.DictReader(text.splitlines()))
+      print("rows:", len(rows))
+      if not rows:
+          print("no data"); sys.exit(0)
+      cols = list(rows[0].keys())
+      print("columns:", cols)
+      for col in cols:
+          vals = [r.get(col, "").strip() for r in rows if r.get(col)]
+          try:
+              nums = [float(x) for x in vals if x]
+              if nums:
+                  print(col, "min=%s max=%s avg=%.2f" % (min(nums), max(nums), sum(nums) / len(nums)))
+          except ValueError:
+              if vals:
+                  print(col, "sample:", vals[0][:40])
+compute_requirements:
+  cpu_cores: 1
+  memory_mb: 512
+timeout_by: 120
+max_cost_cu: 200

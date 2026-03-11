@@ -1,0 +1,30 @@
+# Compute on a JSON dataset: read /data/input, parse JSON, aggregate by event type.
+# Use with a dataset_id that points to events.json (or any JSON array) uploaded to PDP.
+docker:
+  image: python:3.11-slim
+  command:
+    - python3
+    - -c
+    - |
+      import json, sys
+      from pathlib import Path
+      from collections import Counter
+      p = Path("/data/input")
+      if not p.exists():
+          print("ERROR: /data/input not found"); sys.exit(1)
+      data = json.loads(p.read_text())
+      if not isinstance(data, list):
+          data = [data]
+      print("records:", len(data))
+      if not data:
+          sys.exit(0)
+      events = [r.get("event", "") for r in data if isinstance(r, dict)]
+      print("events:", dict(Counter(events)))
+      amounts = [r["amount"] for r in data if isinstance(r, dict) and "amount" in r and r["event"] == "purchase"]
+      if amounts:
+          print("purchase total: %.2f count: %d" % (sum(amounts), len(amounts)))
+compute_requirements:
+  cpu_cores: 1
+  memory_mb: 512
+timeout_by: 120
+max_cost_cu: 200

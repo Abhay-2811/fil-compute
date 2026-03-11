@@ -23,6 +23,10 @@ export const RETRIEVE_OUTPUT_DIR =
 /** Docker binary (use full path if docker is not in PATH when node runs, e.g. /usr/bin/docker) */
 export const DOCKER_BIN = process.env.DOCKER_BIN || "docker";
 
+/** Docker network for job containers. Default "default" (outbound allowed). Set to "none" to disable network. */
+const _dockerNet = (process.env.DOCKER_NETWORK || "default").trim().toLowerCase();
+export const DOCKER_NETWORK = _dockerNet === "none" ? "none" : (_dockerNet || "default");
+
 /** Output upload: "self" (node serves at GET /output/:job_id), "s3" (stub), "none" (default) */
 const _rawBackend = (process.env.OUTPUT_UPLOAD_BACKEND || "none").trim().toLowerCase();
 export const OUTPUT_UPLOAD_BACKEND = (_rawBackend === "self" || _rawBackend === "s3" ? _rawBackend : "none") as "self" | "s3" | "none";
