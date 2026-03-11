@@ -41,6 +41,8 @@ export interface RunDockerOpts {
   env?: Record<string, string>;
   workdir?: string;
   dataFilePath: string;
+  /** Optional host path to mount at /data/output (writable). Job can write artifacts (e.g. model.zip) here. */
+  outputDir?: string;
   memoryMb: number;
   cpuCores: number;
   timeoutBySeconds: number;
@@ -72,6 +74,7 @@ export function runDocker(opts: RunDockerOpts): Promise<RunDockerResult> {
     env = {},
     workdir,
     dataFilePath,
+    outputDir,
     memoryMb,
     cpuCores,
     timeoutBySeconds,
@@ -101,6 +104,9 @@ export function runDocker(opts: RunDockerOpts): Promise<RunDockerResult> {
     "--network",
     DOCKER_NETWORK,
   ];
+  if (outputDir) {
+    args.push("-v", `${path.resolve(outputDir)}:/data/output`);
+  }
 
   for (const [k, v] of Object.entries(env)) {
     args.push("-e", `${k}=${v}`);

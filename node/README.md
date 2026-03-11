@@ -27,8 +27,11 @@ Single env setup for the node provider; retrieval uses DB + Curio paths only (no
 | `RETRIEVE_OUTPUT_DIR` | Dir where the node writes the extracted dataset file (content can be any format) | `/tmp/curio-retrieved` |
 | `OUTPUT_UPLOAD_BACKEND` | Where to expose job result: `self` (node serves at GET /output/:job_id), `s3` (stub, not implemented), `none` (default) | `none` |
 | `NODE_PUBLIC_URL` | Base URL of this node (e.g. `https://compute.example.com:4000`). Required when `OUTPUT_UPLOAD_BACKEND=self` so the node can send `result_url` to Core | — |
+| `JOB_OUTPUT_DIR` | Host dir for job artifacts. When set, each job gets a subdir mounted at `/data/output`; files are downloadable at `result_url/files/:filename` (e.g. model.zip) | — |
 
 When `OUTPUT_UPLOAD_BACKEND=self`, the node stores job stdout in memory and serves it at **GET /output/:job_id** (plain text). It sends that URL to Core as `result_url` in the complete callback; Core returns `result_url` on **GET /jobs/:id** so users can fetch the result from Core or directly from the node.
+
+**Binary artifacts (e.g. trained model zip):** Set **`JOB_OUTPUT_DIR`** (e.g. `/var/lib/compute-node/output`). The node mounts `JOB_OUTPUT_DIR/job_id` at **/data/output** in the container (writable). Any file the job writes there is served at **GET /output/:job_id/files/:filename**. So if the job writes `/data/output/model.zip`, the user can download it at `result_url/files/model.zip` (e.g. `https://compute.example.com/output/48e7d128-.../files/model.zip`). If `JOB_OUTPUT_DIR` is not set, only stdout (text) is available.
 
 ## Where to configure domains (no hardcoding)
 

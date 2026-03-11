@@ -1,13 +1,10 @@
-# ML compute: download a public dataset from URL and run a classifier.
-# Uses UCI Adult (census income, ~48k rows, 3.8 MB) by default; override with docker.env.DATASET_URL.
-# Requires any --dataset-id (job API requirement); data is fetched from URL inside the container.
+# ML compute on your dataset (compute-to-data).
+# Data is read from /data/input — the file from the dataset you pass via --dataset-id (no download).
+# Supports: Adult (no-header, 15 cols), Wine (header with "quality"), or generic CSV with header.
+# Optional: set docker.env.DATASET_URL to fetch from URL instead (fallback when not using PDP data).
 docker:
   image: python:3.11-slim
-  env:
-    # Default: UCI Adult (income >50K classification). Other options:
-    # Wine red:   https://archive.ics.uci.edu/ml/machine-learning-databases/wine-quality/winequality-red.csv
-    # Wine white: https://archive.ics.uci.edu/ml/machine-learning-databases/wine-quality/winequality-white.csv
-    DATASET_URL: "https://archive.ics.uci.edu/ml/machine-learning-databases/adult/adult.data"
+  env: {}   # Set DATASET_URL only if you want to fetch from URL instead of using /data/input
   command:
     - sh
     - -c
@@ -16,21 +13,31 @@ docker:
       pip install -q --no-cache-dir pandas scikit-learn
       python3 -c "
       import os, urllib.request, sys, io
+      from pathlib import Path
       import pandas as pd
       from sklearn.ensemble import RandomForestClassifier
       from sklearn.model_selection import train_test_split
       from sklearn.preprocessing import LabelEncoder
       from sklearn.metrics import accuracy_score, classification_report
 
-      url = os.environ.get('DATASET_URL', '')
-      if not url:
-          print('Set DATASET_URL'); sys.exit(1)
-      print('Downloading', url[:60], '...')
-      with urllib.request.urlopen(url, timeout=120) as r:
-          raw = r.read().decode('utf-8', errors='replace')
-      print('Downloaded', len(raw), 'bytes')
+      data_path = Path('/data/input')
+      url = os.environ.get('DATASET_URL', '').strip()
+      if data_path.exists() and data_path.stat().st_size > 0:
+          raw = data_path.read_text(encoding='utf-8', errors='replace')
+          print('Using /data/input (compute-to-data),', len(raw), 'bytes')
+      elif url:
+          print('Downloading', url[:60], '...')
+          with urllib.request.urlopen(url, timeout=120) as r:
+              raw = r.read().decode('utf-8', errors='replace')
+          print('Downloaded', len(raw), 'bytes')
+      else:
+          print('No data: provide a dataset (--dataset-id) or set DATASET_URL'); sys.exit(1)
 
-      if 'adult' in url.lower():
+      lines = [l for l in raw.splitlines() if l.strip()]
+      first = lines[0] if lines else ''
+      parts = first.split(',')
+      looks_like_adult = len(parts) == 15 and parts[0].strip().isdigit()
+      if looks_like_adult:
           cols = ['age','workclass','fnlwgt','education','ednum','marital','occupation','relationship','race','sex','capgain','caploss','hrs','country','income']
           df = pd.read_csv(io.StringIO(raw), header=None, names=cols, na_values=' ?')
           df = df.dropna()
@@ -63,4 +70,4 @@ compute_requirements:
   cpu_cores: 2
   memory_mb: 2048
 timeout_by: 300
-max_cost_cu: 500
+max_cost_cu: 1000

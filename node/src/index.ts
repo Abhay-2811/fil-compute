@@ -1,7 +1,8 @@
 import express, { type Request, type Response } from "express";
 import fs from "fs";
+import path from "path";
 import crypto from "crypto";
-import { parseDatasetIdFromCid, OUTPUT_UPLOAD_BACKEND, NODE_PUBLIC_URL } from "./config.js";
+import { parseDatasetIdFromCid, OUTPUT_UPLOAD_BACKEND, NODE_PUBLIC_URL, JOB_OUTPUT_DIR } from "./config.js";
 import { preflightData, retrieveDatasetFile } from "./retrieve.js";
 import { runDocker, checkDockerAvailable } from "./docker-runner.js";
 import { sendComplete } from "./complete-callback.js";
@@ -131,6 +132,11 @@ app.post("/start", async (req: Request, res: Response) => {
       const dockerSpec = docker as Record<string, unknown>;
       const compReq = compute_requirements as Record<string, unknown>;
       const image = dockerSpec.image as string;
+      let outputDir: string | undefined;
+      if (JOB_OUTPUT_DIR) {
+        outputDir = path.join(JOB_OUTPUT_DIR, jobId);
+        fs.mkdirSync(outputDir, { recursive: true });
+      }
       logger.info("Starting Docker container", {
         job_id: jobId,
         attempt_id: attemptId,
@@ -146,6 +152,7 @@ app.post("/start", async (req: Request, res: Response) => {
           env: dockerSpec.env as Record<string, string> | undefined,
           workdir: dockerSpec.workdir as string | undefined,
           dataFilePath,
+          outputDir,
           memoryMb: (compReq.memory_mb as number) || 512,
           cpuCores: (compReq.cpu_cores as number) || 1,
           timeoutBySeconds: timeout_by as number,
@@ -240,6 +247,32 @@ app.get("/output/:job_id", (req: Request, res: Response) => {
     return res.status(404).json({ error: "NOT_FOUND", message: "Job output not found or expired" });
   }
   res.type("text/plain").send(entry.stdout);
+});
+
+/** GET /output/:job_id/files/:filename — serve artifact file (when JOB_OUTPUT_DIR set). Job writes to /data/output/ in container. */
+app.get("/output/:job_id/files/:filename", (req: Request, res: Response) => {
+  const { job_id: jobId, filename } = req.params;
+  if (!JOB_OUTPUT_DIR) {
+    return res.status(503).json({ error: "NOT_CONFIGURED", message: "JOB_OUTPUT_DIR not set" });
+  }
+  if (!filename || filename.includes("..") || filename.includes("/") || filename.includes("\\")) {
+    return res.status(400).json({ error: "BAD_REQUEST", message: "Invalid filename" });
+  }
+  const filePath = path.join(JOB_OUTPUT_DIR, jobId, filename);
+  if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
+    return res.status(404).json({ error: "NOT_FOUND", message: "File not found" });
+  }
+  const ext = path.extname(filename).toLowerCase();
+  const types: Record<string, string> = {
+    ".zip": "application/zip",
+    ".json": "application/json",
+    ".pkl": "application/octet-stream",
+    ".pt": "application/octet-stream",
+    ".onnx": "application/octet-stream",
+    ".bin": "application/octet-stream",
+  };
+  res.type(types[ext] || "application/octet-stream");
+  res.sendFile(path.resolve(filePath));
 });
 
 const port = Number(process.env.PORT) || 4000;

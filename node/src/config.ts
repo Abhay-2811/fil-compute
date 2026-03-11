@@ -34,6 +34,9 @@ export const OUTPUT_UPLOAD_BACKEND = (_rawBackend === "self" || _rawBackend === 
 /** Base URL of this node (e.g. https://compute.example.com:4000). Required when OUTPUT_UPLOAD_BACKEND is "self". */
 export const NODE_PUBLIC_URL = (process.env.NODE_PUBLIC_URL || "").trim();
 
+/** Host dir for job artifacts. When set, each job gets JOB_OUTPUT_DIR/job_id mounted at /data/output; files are served at GET /output/:job_id/files/:filename */
+export const JOB_OUTPUT_DIR = (process.env.JOB_OUTPUT_DIR || "").trim();
+
 /** CU weights (v0). Match config/cu-model-v0.json */
 export const CU_WEIGHTS = {
   cpu_weight: 0.001,

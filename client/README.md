@@ -44,7 +44,7 @@ CORE_URL=http://127.0.0.1:3000 npx fil-compute run \
 - **Basic:** `examples/docker-compute-job.yaml` — minimal (e.g. `wc -c` on `/data/input`). Required: `docker.image`; optional: `docker.command`, `compute_requirements`, `timeout_by`, `max_cost_cu` (default 100).
 - **CSV compute:** `examples/docker-compute-job-csv.yaml` — Python reads CSV at `/data/input`, prints row count, columns, and numeric min/max/avg.
 - **JSON compute:** `examples/docker-compute-job-json.yaml` — Python reads JSON array, prints event counts and purchase total.
-- **ML compute:** `examples/docker-compute-job-ml.yaml` — Downloads a **large public dataset** from a URL (default: UCI Adult, ~48k rows, 3.8 MB), trains a RandomForest classifier, prints accuracy and classification report. Override `docker.env.DATASET_URL` in the YAML to use Wine Quality or another CSV (see job file comments).
+- **ML compute:** `examples/docker-compute-job-ml.yaml` — **Compute-to-data:** reads from `/data/input` (the dataset you pass with `--dataset-id`). Trains a RandomForest classifier (Adult, Wine, or generic CSV), prints accuracy and report. No download when using your PDP data. Optional: set `docker.env.DATASET_URL` to fetch from a URL instead.
 
 ## Sample data and PDP upload
 
@@ -65,21 +65,21 @@ To run compute on real data, upload a file to PDP to get a **dataset ID**, then 
    ```
    See `storage/sample-data/README.md` for full steps.
 
-### ML job with online dataset
+### ML job (compute-to-data)
 
-The ML job **downloads data from a URL** inside the container (no PDP upload needed). You still pass `--dataset-id` (any valid ID; the job ignores `/data/input` and uses `DATASET_URL`).
+The ML job **reads from `/data/input`** — the dataset you pass with `--dataset-id`. Data stays on the PDP; compute runs where the data is (no download). Upload your CSV (e.g. Adult, Wine) to PDP, then:
 
 ```bash
-# Default: UCI Adult (census income, ~48k rows). Needs ~2–3 min (pip install + train).
-npx fil-compute run --compute-provider node-001 --dataset-id 1 \
+npx fil-compute run --compute-provider node-001 --dataset-id YOUR_DATASET_ID \
   --job-file examples/docker-compute-job-ml.yaml --private-key 0x...
 ```
 
-To use a different dataset, edit the job YAML and set `docker.env.DATASET_URL` to a direct CSV URL, e.g.:
+Output will say `Using /data/input (compute-to-data), N bytes`. To run on a **URL instead** (no PDP data), set `docker.env.DATASET_URL` in the YAML to a CSV URL (e.g. UCI Adult or Wine links in the job file comments).
 
-- **UCI Adult (default):** `https://archive.ics.uci.edu/ml/machine-learning-databases/adult/adult.data` (3.8 MB, income classification)
-- **Wine Quality red:** `https://archive.ics.uci.edu/ml/machine-learning-databases/wine-quality/winequality-red.csv`
-- **Wine Quality white:** `https://archive.ics.uci.edu/ml/machine-learning-databases/wine-quality/winequality-white.csv`
+### Job result: stdout vs binary artifacts
+
+- **`result_url`** (e.g. `https://compute.abhayu.com/output/48e7d128-...`) returns the job’s **stdout** (plain text). That’s what you get when you open the link or when the CLI shows `result_url`.
+- **Binary artifacts (e.g. trained model zip):** If the **compute node** has **`JOB_OUTPUT_DIR`** set, the job can write files to **`/data/output/`** in the container. Those files are then available at **`result_url/files/:filename`**. Example: job writes `/data/output/model.zip` → download at `https://compute.abhayu.com/output/48e7d128-.../files/model.zip`. The node must be configured with `JOB_OUTPUT_DIR` and `OUTPUT_UPLOAD_BACKEND=self` (and `NODE_PUBLIC_URL`) for this to work.
 
 If the job fails with **"Temporary failure in name resolution"** or **"No matching distribution found for pandas"**, the compute node’s Docker environment has no outbound internet or DNS (so `pip install` inside the container fails). Two options:
 
