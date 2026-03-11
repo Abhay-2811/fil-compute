@@ -137,6 +137,14 @@ app.post("/start", async (req: Request, res: Response) => {
         outputDir = path.join(JOB_OUTPUT_DIR, jobId);
         fs.mkdirSync(outputDir, { recursive: true });
       }
+      const dockerEnv: Record<string, string> =
+        dockerSpec.env && typeof dockerSpec.env === "object"
+          ? { ...(dockerSpec.env as Record<string, string>) }
+          : {};
+      if (outputDir && NODE_PUBLIC_URL) {
+        const base = NODE_PUBLIC_URL.replace(/\/$/, "");
+        dockerEnv.RESULT_URL_BASE = `${base}/output/${jobId}`;
+      }
       logger.info("Starting Docker container", {
         job_id: jobId,
         attempt_id: attemptId,
@@ -149,7 +157,7 @@ app.post("/start", async (req: Request, res: Response) => {
         await runDocker({
           image,
           command: dockerSpec.command as string[] | undefined,
-          env: dockerSpec.env as Record<string, string> | undefined,
+          env: dockerEnv,
           workdir: dockerSpec.workdir as string | undefined,
           dataFilePath,
           outputDir,

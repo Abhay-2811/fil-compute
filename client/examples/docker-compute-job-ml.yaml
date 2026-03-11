@@ -1,7 +1,7 @@
 # ML compute on your dataset (compute-to-data).
 # Data is read from /data/input — the file from the dataset you pass via --dataset-id (no download).
-# Supports: Adult (no-header, 15 cols), Wine (header with "quality"), or generic CSV with header.
-# Optional: set docker.env.DATASET_URL to fetch from URL instead (fallback when not using PDP data).
+# Saves trained model to /data/output/ (model.pkl + model.zip) when the node sets JOB_OUTPUT_DIR; then downloadable at result_url/files/model.zip.
+# Optional: set docker.env.DATASET_URL to fetch from URL instead of using /data/input.
 docker:
   image: python:3.11-slim
   env: {}   # Set DATASET_URL only if you want to fetch from URL instead of using /data/input
@@ -12,13 +12,14 @@ docker:
       set -e
       pip install -q --no-cache-dir pandas scikit-learn
       python3 -c "
-      import os, urllib.request, sys, io
+      import os, urllib.request, sys, io, zipfile
       from pathlib import Path
       import pandas as pd
       from sklearn.ensemble import RandomForestClassifier
       from sklearn.model_selection import train_test_split
       from sklearn.preprocessing import LabelEncoder
       from sklearn.metrics import accuracy_score, classification_report
+      import joblib
 
       data_path = Path('/data/input')
       url = os.environ.get('DATASET_URL', '').strip()
@@ -65,6 +66,22 @@ docker:
       pred = clf.predict(X_test)
       print('Accuracy:', round(accuracy_score(y_test, pred), 4))
       print(classification_report(y_test, pred))
+
+      out_dir = Path('/data/output')
+      if out_dir.is_dir():
+          pkl_path = out_dir / 'model.pkl'
+          joblib.dump(clf, pkl_path)
+          zip_path = out_dir / 'model.zip'
+          with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
+              zf.write(pkl_path, 'model.pkl')
+          base = os.environ.get('RESULT_URL_BASE', '')
+          if base:
+              print('Artifact (zip):', base + '/files/model.zip')
+              print('Artifact (pkl):', base + '/files/model.pkl')
+          else:
+              print('Artifacts saved: /data/output/model.pkl, /data/output/model.zip')
+      else:
+          print('Artifacts: /data/output not mounted (set JOB_OUTPUT_DIR on node to enable download)')
       "
 compute_requirements:
   cpu_cores: 2
