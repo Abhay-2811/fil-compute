@@ -8,6 +8,7 @@ import { Command } from "commander";
 import { depositCmd } from "../lib/deposit.mjs";
 import { balanceCmd } from "../lib/balance.mjs";
 import { runCmd } from "../lib/run.mjs";
+import { uploadPdpCmd } from "../lib/storage/upload-pdp.mjs";
 
 const program = new Command();
 
@@ -21,6 +22,11 @@ program
   .description("Escrow: deposit funds, check balance")
   .addCommand(depositCmd())
   .addCommand(balanceCmd());
+
+program
+  .command("storage")
+  .description("Storage: upload input data")
+  .addCommand(uploadPdpCmd());
 
 program.addCommand(runCmd());
 

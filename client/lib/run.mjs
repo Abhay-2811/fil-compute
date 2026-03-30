@@ -2,6 +2,7 @@ import { readFileSync } from "fs";
 import { Command } from "commander";
 import yaml from "js-yaml";
 import { CORE_URL, getAddressFromPrivateKey, getBalanceFromCore } from "./config.mjs";
+import { prepareResultStorage } from "./storage/index.mjs";
 
 function runCmd() {
   const cmd = new Command("run")
@@ -40,6 +41,25 @@ function runCmd() {
         console.error("Error: job file must have docker.image");
         process.exit(1);
       }
+      let resultStorageHint;
+      try {
+        const prepared = await prepareResultStorage({
+          jobSpec,
+          clientAddress,
+          datasetId: opts.datasetId,
+          nodeId: opts.computeProvider,
+        });
+        if (prepared && prepared.dockerEnvPatch && Object.keys(prepared.dockerEnvPatch).length > 0) {
+          docker.env = { ...(docker.env || {}), ...prepared.dockerEnvPatch };
+        }
+        resultStorageHint = prepared ? prepared.resultStorageHint : undefined;
+        if (prepared && prepared.storageMeta && prepared.storageMeta.provider === "s3") {
+          console.log("Prepared S3 upload target:", prepared.storageMeta.objectUrl || prepared.storageMeta.key);
+        }
+      } catch (e) {
+        console.error("Storage preparation failed:", e.message || e);
+        process.exit(1);
+      }
 
       const balance = await getBalanceFromCore(coreUrl, clientAddress).catch((e) => {
         console.error("Balance check failed:", e.message);
@@ -60,6 +80,7 @@ function runCmd() {
         max_cost_cu: maxCostCu,
       };
       if (opts.resultStorage) body.result_storage = opts.resultStorage;
+      else if (resultStorageHint) body.result_storage = resultStorageHint;
 
       const submitRes = await fetch(`${coreUrl}/jobs`, {
         method: "POST",

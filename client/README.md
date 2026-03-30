@@ -8,6 +8,7 @@ The CLI loads **.env** from the current working directory (when you run `fil-com
 
 - **escrow deposit** — Add funds to the escrow contract (fetches RPC/contract from Core).
 - **escrow balance** — Check balance (from Core, or from contract when Core uses EVM escrow).
+- **storage upload-pdp** — Upload local input file to PDP and create dataset (returns `dataset_id`).
 - **run** — Submit a job from a YAML file; checks balance >= max_cost_cu before submit.
 
 ## Env
@@ -21,6 +22,10 @@ All other escrow settings (RPC URL, contract address, CU→wei) are provided by 
 ## Examples
 
 ```bash
+# Upload input data file to PDP and get dataset_id
+npx fil-compute storage upload-pdp --file ../storage/sample-data/sensor_readings.csv \
+  --provider-id 22 --private-key 0x...
+
 # Deposit 1000 CU (Core returns RPC and contract from GET /config)
 npx fil-compute escrow deposit --amount 1000 --private-key 0x... [--core-url https://core.example.com]
 
@@ -46,6 +51,31 @@ CORE_URL=http://127.0.0.1:3000 npx fil-compute run \
 - **JSON compute:** `examples/docker-compute-job-json.yaml` — Python reads JSON array, prints event counts and purchase total.
 - **ML compute:** `examples/docker-compute-job-ml.yaml` — **Compute-to-data:** reads from `/data/input` (the dataset you pass with `--dataset-id`). Trains a RandomForest classifier (Adult, Wine, or generic CSV), prints accuracy and report. No download when using your PDP data. Optional: set `docker.env.DATASET_URL` to fetch from a URL instead.
 
+### Storage block (optional, for client-owned S3 result upload)
+
+Add this section to a job YAML to let the client generate a pre-signed PUT URL and inject it into job env:
+
+```yaml
+storage:
+  provider: s3
+  bucket: my-results-bucket
+  region: us-east-1
+  key_prefix: datatzen/jobs
+  filename: model.zip
+  content_type: application/zip
+  expires_seconds: 3600
+  # optional:
+  # endpoint: https://s3.amazonaws.com
+  # force_path_style: false
+  # object_key: datatzen/jobs/custom-key.zip
+```
+
+`fil-compute run` will set `result_storage: "s3"` and inject `RESULT_UPLOAD_URL`/`RESULT_UPLOAD_CONTENT_TYPE`/`RESULT_OBJECT_URL` into `docker.env`.
+If `storage.filename` is omitted, node defaults artifact filename to `<job_id>.zip`.
+Node performs the actual PUT upload from `/data/output/<RESULT_FILENAME>` and will mark job as failed if upload fails.
+Client must provide AWS credentials in env when generating presigned URLs:
+`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` (and optional `AWS_SESSION_TOKEN`).
+
 ## Sample data and PDP upload
 
 To run compute on real data, upload a file to PDP to get a **dataset ID**, then pass that ID to `run --dataset-id <id>`.
@@ -54,9 +84,9 @@ To run compute on real data, upload a file to PDP to get a **dataset ID**, then 
    - `sensor_readings.csv` — 15 rows (timestamp, sensor_id, value, unit)
    - `events.json` — 8 events (login, click, purchase, logout)
 
-2. **Upload** from `storage/`:  
-   `INPUT_FILE=sample-data/sensor_readings.csv node index.js`  
-   (or `events.json`). Note the printed **dataSetId**.
+2. **Upload** using client CLI (recommended):  
+   `npx fil-compute storage upload-pdp --file ../storage/sample-data/sensor_readings.csv --provider-id 22 --private-key 0x...`  
+   (or `events.json`). Note the printed **Dataset ID**.
 
 3. **Run compute** with that ID and the matching job file:
    ```bash
@@ -76,10 +106,11 @@ npx fil-compute run --compute-provider node-001 --dataset-id YOUR_DATASET_ID \
 
 Output will say `Using /data/input (compute-to-data), N bytes`. To run on a **URL instead** (no PDP data), set `docker.env.DATASET_URL` in the YAML to a CSV URL (e.g. UCI Adult or Wine links in the job file comments).
 
-### Job result: stdout vs binary artifacts
+### Job result: stdout vs node artifacts vs S3 artifacts
 
 - **`result_url`** (e.g. `https://compute.abhayu.com/output/48e7d128-...`) returns the job’s **stdout** (plain text). That’s what you get when you open the link or when the CLI shows `result_url`.
 - **Binary artifacts (e.g. trained model zip):** If the **compute node** has **`JOB_OUTPUT_DIR`** set, the job can write files to **`/data/output/`** in the container. Those files are then available at **`result_url/files/:filename`**. Example: job writes `/data/output/model.zip` → download at `https://compute.abhayu.com/output/48e7d128-.../files/model.zip`. The node must be configured with `JOB_OUTPUT_DIR` and `OUTPUT_UPLOAD_BACKEND=self` (and `NODE_PUBLIC_URL`) for this to work.
+- **Client-owned S3 artifacts:** If job YAML has `storage.provider: s3`, `fil-compute run` generates a pre-signed PUT URL. Node uploads `model.zip` from `/data/output` to this URL. On success, Core stores the S3 object URL as canonical `result_url`; on upload failure, the job fails (`FAILED_CONTAINER`). Storage cost is paid by the client’s S3 account.
 
 If the job fails with **"Temporary failure in name resolution"** or **"No matching distribution found for pandas"**, the compute node’s Docker environment has no outbound internet or DNS (so `pip install` inside the container fails). Two options:
 

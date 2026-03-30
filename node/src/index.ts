@@ -6,7 +6,7 @@ import { parseDatasetIdFromCid, OUTPUT_UPLOAD_BACKEND, NODE_PUBLIC_URL, JOB_OUTP
 import { preflightData, retrieveDatasetFile } from "./retrieve.js";
 import { runDocker, checkDockerAvailable } from "./docker-runner.js";
 import { sendComplete } from "./complete-callback.js";
-import { uploadOutput } from "./output-upload.js";
+import { uploadOutput, uploadArtifactToPresignedUrl } from "./output-upload.js";
 import { getOutput } from "./output-store.js";
 import { logger } from "./logger.js";
 
@@ -141,6 +141,9 @@ app.post("/start", async (req: Request, res: Response) => {
         dockerSpec.env && typeof dockerSpec.env === "object"
           ? { ...(dockerSpec.env as Record<string, string>) }
           : {};
+      if (!dockerEnv.RESULT_FILENAME) {
+        dockerEnv.RESULT_FILENAME = `${jobId}.zip`;
+      }
       if (outputDir && NODE_PUBLIC_URL) {
         const base = NODE_PUBLIC_URL.replace(/\/$/, "");
         dockerEnv.RESULT_URL_BASE = `${base}/output/${jobId}`;
@@ -178,12 +181,42 @@ app.post("/start", async (req: Request, res: Response) => {
         const resultCid =
           "stdout:" +
           crypto.createHash("sha256").update(stdout).digest("hex").slice(0, 16);
+        let canonicalResultUrl: string | undefined;
+        if (dockerEnv.RESULT_UPLOAD_URL) {
+          if (!outputDir) {
+            throw new Error(
+              "RESULT_UPLOAD_URL provided but JOB_OUTPUT_DIR is not configured on node"
+            );
+          }
+          const artifactName =
+            (dockerEnv.RESULT_FILENAME || "model.zip").trim() || "model.zip";
+          const artifactPath = path.join(outputDir, artifactName);
+          await uploadArtifactToPresignedUrl(
+            jobId,
+            artifactPath,
+            dockerEnv.RESULT_UPLOAD_URL,
+            dockerEnv.RESULT_UPLOAD_CONTENT_TYPE
+          );
+          if (dockerEnv.RESULT_OBJECT_URL) {
+            canonicalResultUrl = dockerEnv.RESULT_OBJECT_URL;
+          } else {
+            try {
+              const parsed = new URL(dockerEnv.RESULT_UPLOAD_URL);
+              parsed.search = "";
+              parsed.hash = "";
+              canonicalResultUrl = parsed.toString();
+            } catch {
+              canonicalResultUrl = undefined;
+            }
+          }
+        }
         const uploadResult = await uploadOutput(jobId, stdout, stderr);
+        const resultUrl = canonicalResultUrl || uploadResult?.url;
         logger.info("Sending SUCCESS to Core", {
           job_id: jobId,
           attempt_id: attemptId,
           result_cid: resultCid,
-          result_url: uploadResult?.url,
+          result_url: resultUrl,
         });
         await sendComplete({
           jobId,
@@ -191,7 +224,7 @@ app.post("/start", async (req: Request, res: Response) => {
           status: "SUCCESS",
           metrics,
           resultCid,
-          resultUrl: uploadResult?.url,
+          resultUrl,
         });
         logger.info("Job completed successfully", { job_id: jobId, attempt_id: attemptId });
       } else {
