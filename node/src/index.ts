@@ -197,7 +197,9 @@ app.post("/start", async (req: Request, res: Response) => {
             dockerEnv.RESULT_UPLOAD_URL,
             dockerEnv.RESULT_UPLOAD_CONTENT_TYPE
           );
-          if (dockerEnv.RESULT_OBJECT_URL) {
+          if (dockerEnv.RESULT_DOWNLOAD_URL) {
+            canonicalResultUrl = dockerEnv.RESULT_DOWNLOAD_URL;
+          } else if (dockerEnv.RESULT_OBJECT_URL) {
             canonicalResultUrl = dockerEnv.RESULT_OBJECT_URL;
           } else {
             try {

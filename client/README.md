@@ -53,7 +53,7 @@ CORE_URL=http://127.0.0.1:3000 npx fil-compute run \
 
 ### Storage block (optional, for client-owned S3 result upload)
 
-Add this section to a job YAML to let the client generate a pre-signed PUT URL and inject it into job env:
+Add this section to a job YAML to let the client generate pre-signed PUT/GET URLs and inject them into job env:
 
 ```yaml
 storage:
@@ -70,11 +70,12 @@ storage:
   # object_key: datatzen/jobs/custom-key.zip
 ```
 
-`fil-compute run` will set `result_storage: "s3"` and inject `RESULT_UPLOAD_URL`/`RESULT_UPLOAD_CONTENT_TYPE`/`RESULT_OBJECT_URL` into `docker.env`.
+`fil-compute run` will set `result_storage: "s3"` and inject `RESULT_UPLOAD_URL`/`RESULT_DOWNLOAD_URL`/`RESULT_UPLOAD_CONTENT_TYPE`/`RESULT_OBJECT_URL` into `docker.env`.
 If `storage.filename` is omitted, node defaults artifact filename to `<job_id>.zip`.
 Node performs the actual PUT upload from `/data/output/<RESULT_FILENAME>` and will mark job as failed if upload fails.
 Client must provide AWS credentials in env when generating presigned URLs:
 `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` (and optional `AWS_SESSION_TOKEN`).
+Do not include bucket name in `key_prefix`; use `jobs/...` style prefixes.
 
 ## Sample data and PDP upload
 
@@ -110,7 +111,7 @@ Output will say `Using /data/input (compute-to-data), N bytes`. To run on a **UR
 
 - **`result_url`** (e.g. `https://compute.abhayu.com/output/48e7d128-...`) returns the job’s **stdout** (plain text). That’s what you get when you open the link or when the CLI shows `result_url`.
 - **Binary artifacts (e.g. trained model zip):** If the **compute node** has **`JOB_OUTPUT_DIR`** set, the job can write files to **`/data/output/`** in the container. Those files are then available at **`result_url/files/:filename`**. Example: job writes `/data/output/model.zip` → download at `https://compute.abhayu.com/output/48e7d128-.../files/model.zip`. The node must be configured with `JOB_OUTPUT_DIR` and `OUTPUT_UPLOAD_BACKEND=self` (and `NODE_PUBLIC_URL`) for this to work.
-- **Client-owned S3 artifacts:** If job YAML has `storage.provider: s3`, `fil-compute run` generates a pre-signed PUT URL. Node uploads `model.zip` from `/data/output` to this URL. On success, Core stores the S3 object URL as canonical `result_url`; on upload failure, the job fails (`FAILED_CONTAINER`). Storage cost is paid by the client’s S3 account.
+- **Client-owned S3 artifacts:** If job YAML has `storage.provider: s3`, `fil-compute run` generates pre-signed PUT/GET URLs. Node uploads artifact from `/data/output` to PUT URL. On success, Core stores pre-signed GET URL as canonical `result_url`; on upload failure, the job fails (`FAILED_CONTAINER`). Storage cost is paid by the client’s S3 account.
 
 If the job fails with **"Temporary failure in name resolution"** or **"No matching distribution found for pandas"**, the compute node’s Docker environment has no outbound internet or DNS (so `pip install` inside the container fails). Two options:
 

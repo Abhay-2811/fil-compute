@@ -20,7 +20,8 @@ read PIECE_CID PARKED_ID RAW_SIZE PADDED_SIZE < <(
     SELECT pr.piece_cid, pr.piece_ref, pp.piece_raw_size, pp.piece_padded_size
     FROM curio.pdp_data_set_pieces dsp
     JOIN curio.pdp_piecerefs pr ON pr.id = dsp.pdp_pieceref
-    JOIN curio.parked_pieces pp ON pp.id = pr.piece_ref
+    JOIN curio.parked_piece_refs pprf ON pprf.ref_id = pr.piece_ref
+    JOIN curio.parked_pieces pp ON pp.id = pprf.piece_id
     WHERE dsp.data_set = $DATASET_ID
     LIMIT 1;
   " | tr '|' ' '

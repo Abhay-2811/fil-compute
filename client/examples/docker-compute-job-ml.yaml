@@ -88,5 +88,12 @@ docker:
 compute_requirements:
   cpu_cores: 2
   memory_mb: 2048
+storage:
+  provider: s3
+  bucket: abhay-test-1234
+  region: us-east-1
+  key_prefix: jobs
+  expires_seconds: 3600
+  endpoint: https://o3-rc3.akave.xyz
 timeout_by: 300
 max_cost_cu: 10
