@@ -17,7 +17,7 @@ import pg from "pg";
 const { Client } = pg;
 
 const RESOLVE_SQL = `
-  SELECT pr.piece_ref, pp.piece_raw_size
+  SELECT pp.id AS piece_ref, pp.piece_raw_size
   FROM curio.pdp_data_set_pieces dsp
   JOIN curio.pdp_piecerefs pr ON pr.id = dsp.pdp_pieceref
   JOIN curio.parked_piece_refs pprf ON pprf.ref_id = pr.piece_ref
