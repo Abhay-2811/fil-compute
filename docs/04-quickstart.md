@@ -43,10 +43,11 @@ Add to your job YAML:
 ```yaml
 storage:
   provider: s3
-  bucket: my-results-bucket
+  bucket: akave-o3-results
   region: us-east-1
   key_prefix: jobs
   expires_seconds: 3600
+  endpoint: https://o3-rc3.akave.xyz
 ```
 
 Then run `fil-compute run` normally. The client prepares presigned URLs, node uploads artifact, and Core returns presigned GET as `result_url`.

@@ -26,7 +26,7 @@
 ```yaml
 storage:
   provider: s3
-  bucket: my-results-bucket
+  bucket: akave-o3-results
   region: us-east-1
   key_prefix: jobs
   expires_seconds: 3600
