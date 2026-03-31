@@ -1,50 +1,55 @@
 # EVM escrow contract spec
 
-Escrow lives on an EVM-compatible chain. User funds are locked per job; settlement (pay node, release remainder) or full refund is on-chain. Minimal job state is stored on-chain on a requirement basis for settlement and audit.
+Escrow lives on an EVM-compatible chain with a **balance-based** model.
+Clients pre-fund once, and Core settles used CU after successful execution.
 
 ## Contract responsibilities
 
-### Lock
+### Deposit (client funded)
 
-- **Caller:** User (or Core on behalf of user via meta-tx / relayer).
-- **Effect:** Lock `max_cost_cu` (or token equivalent) for a job. Contract records the lock keyed by `job_id`.
-- **Optional on-chain job state (requirement basis):** `job_id`, `user` (address), `nodeid` or node payout address, `max_cost_cu`. Full job payload stays off-chain in Core DB.
+- **Caller:** Client wallet.
+- **Effect:** Increase the client's available escrow balance.
+- **Method:** `deposit()` payable.
 
-### Settle (success or container error)
+### Balance read
 
-- **Caller:** Core (or authorized relayer) only.
-- **Args:** `job_id`, `attempt_id`, `cu_used`, `node_payout_address`.
-- **Effect:** Pay `cu_used` (or token equivalent) to `node_payout_address`; release remainder to the user who locked; mark job as settled (exactly-once). Reverts if job already settled or unknown.
+- **Caller:** any.
+- **Effect:** Return available balance for user address.
+- **Method:** `balances(user)` (or adapter equivalent).
 
-### Refund
+### Settle success (Core-signed)
 
-- **Caller:** Core (or authorized relayer).
-- **Args:** `job_id`.
-- **Effect:** Release full locked amount back to the user; mark job as settled (exactly-once). Used on FAILED_NODE / FAILED_PREFLIGHT.
+- **Caller:** Core signer only.
+- **Args:** `user`, `jobId`, `attemptId`, `cuUsed`, `nodePayout`.
+- **Effect:** Deduct converted value from user balance and credit node payout.
+- **Guarantee:** exact-once by job/attempt guard in contract or adapter logic.
 
-## Job state on-chain (minimal)
+## Conversion and accounting
 
-At lock time the contract may store only what is needed for settlement and audit:
+- CU to wei uses `ESCROW_CU_TO_WEI` conversion factor from Core config.
+- Client pre-check: Core validates balance >= `max_cost_cu * cu_to_wei` before scheduling.
+- Final settlement uses `cu_used` from node completion metrics path.
 
-| Field          | Purpose                          |
-|----------------|-----------------------------------|
-| `job_id`       | Unique job key                    |
-| `user`         | Address that locked funds         |
-| `node`         | Node payout address (or nodeid)   |
-| `max_cost_cu`  | Locked amount                     |
-| `attempt_id`   | Optional; can be set at START      |
+## On-chain state (minimal)
 
-Heavy payload (cid, docker spec, compute_requirements, etc.) remains off-chain in Core.
+| Field | Purpose |
+|---|---|
+| `balances[user]` | available prepaid balance |
+| `settled[job_id]` or `(job_id,attempt_id)` marker | prevent double settlement |
+| optional settlement events | auditable payout history |
+
+Job payload (docker spec, compute requirements, CID) remains off-chain in Core.
 
 ## Core adapter (EVM)
 
-- **lock:** Submit tx to contract (or return approval payload for user to sign).
-- **settleSuccess / settleRefund:** Submit the corresponding contract call.
-- **getBalance:** Read user balance or allowance from contract (or indexer).
+- **deposit path (client):** CLI sends payable tx directly using Core-provided config.
+- **settleSuccess (core):** signer tx on successful job completion.
+- **getBalance:** Core or client reads contract balance mapping.
+- **failure path:** preflight/node failures do not settle debit (no per-job lock to refund).
 
 Config: RPC URL, contract address, optional relayer/signer (Core wallet or backend signer). Node payout address from node registry (e.g. extend with `payout_address`) or from node COMPLETE/receipt.
 
 ## Open
 
-- CU → token conversion (rate, oracle, or fixed scale).
-- Whether lock is user-signed or relayer-signed (meta-tx).
+- CU conversion governance and upgrade path.
+- Settlement replay protection mechanism shape (contract-native vs adapter table).

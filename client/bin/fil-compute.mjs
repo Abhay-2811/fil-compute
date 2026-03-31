@@ -14,7 +14,7 @@ const program = new Command();
 
 program
   .name("fil-compute")
-  .description("Client for datatzen compute: escrow and job run")
+  .description("Client for fil-compute: escrow and job run")
   .version("0.1.0");
 
 program

@@ -1,5 +1,5 @@
 {
-  "name": "@datatzen/contracts",
+  "name": "@fil-compute/contracts",
   "version": "0.1.0",
   "private": true,
   "scripts": {

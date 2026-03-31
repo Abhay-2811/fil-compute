@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://datatzen.io/schemas/start.json",
+  "$id": "https://fil-compute.io/schemas/start.json",
   "title": "Start",
   "description": "Core → Node: start job execution",
   "definitions": {

@@ -1,6 +1,6 @@
 # fil-compute client
 
-CLI for submitting compute jobs to datatzen Core. **Client always pays** via balance-based escrow: pre-fund with `escrow deposit`, then `run` (checks balance before submit).
+CLI for submitting compute jobs to fil-compute Core. **Client always pays** via balance-based escrow: pre-fund with `escrow deposit`, then `run` (checks balance before submit).
 
 The CLI loads **.env** from the current working directory (when you run `fil-compute`). Only **CORE_URL** is needed on the client; escrow RPC URL and contract address are returned by Core (`GET /config`).
 
@@ -60,14 +60,14 @@ storage:
   provider: s3
   bucket: my-results-bucket
   region: us-east-1
-  key_prefix: datatzen/jobs
+  key_prefix: fil-compute/jobs
   filename: model.zip
   content_type: application/zip
   expires_seconds: 3600
   # optional:
   # endpoint: https://s3.amazonaws.com
   # force_path_style: false
-  # object_key: datatzen/jobs/custom-key.zip
+  # object_key: fil-compute/jobs/custom-key.zip
 ```
 
 `fil-compute run` will set `result_storage: "s3"` and inject `RESULT_UPLOAD_URL`/`RESULT_DOWNLOAD_URL`/`RESULT_UPLOAD_CONTENT_TYPE`/`RESULT_OBJECT_URL` into `docker.env`.

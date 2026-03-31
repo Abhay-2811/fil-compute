@@ -1,4 +1,4 @@
-# datatzen v0
+# fil-compute v0
 
 **IPFS-but-for-compute** — submit compute jobs to a node that has the data; node runs user-provided Docker (sandboxed); Core handles preflight, escrow, metering, and returns a result CID.
 
@@ -32,7 +32,7 @@ Trust the node for correctness (“best effort”). Validation is out of scope.
 ## Quick ref
 
 - **Core:** scheduler + billing + job state machine + API.
-- **Node:** a **remote server** with **storage and compute** that runs **datatzen's Node Agent** (our code). It has a public identity (`nodeid`) and, for on-chain escrow, a payout address. Core talks to it for preflight/start; the node calls Core back with COMPLETE. Trust model (v0): best-effort.
+- **Node:** a **remote server** with **storage and compute** that runs **fil-compute's Node Agent** (our code). It has a public identity (`nodeid`) and, for on-chain escrow, a payout address. Core talks to it for preflight/start; the node calls Core back with COMPLETE. Trust model (v0): best-effort.
 - **CU:** compute unit = resource-weighted + time-based metering.
 - **Escrow:** Balance-based: clients pre-fund (contract `deposit()`); Core (signer) only deducts on job success (`settleSuccess(user, jobId, ...)`). No per-job lock. Core can use in-memory escrow for dev (`ESCROW_PROVIDER=memory`) or EVM contract (`ESCROW_PROVIDER=evm`).
 

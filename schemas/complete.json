@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://datatzen.io/schemas/complete.json",
+  "$id": "https://fil-compute.io/schemas/complete.json",
   "title": "Complete",
   "description": "Node → Core: job completion (SUCCESS or CONTAINER_ERROR)",
   "type": "object",

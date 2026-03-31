@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://datatzen.io/schemas/job-submit-request.json",
+  "$id": "https://fil-compute.io/schemas/job-submit-request.json",
   "title": "JobSubmitRequest",
   "type": "object",
   "required": ["nodeid", "cid", "client_address", "compute_requirements", "docker", "timeout_by", "max_cost_cu"],

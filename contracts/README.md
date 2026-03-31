@@ -1,6 +1,6 @@
 # JobEscrow contract
 
-EVM escrow for datatzen jobs. **Balance-based:** clients `deposit()`; Core (signer) calls `settleSuccess(user, jobId, attemptId, cuUsed, nodePayout)` when a job succeeds. Constructor takes signer address (Core’s escrow signer). Spec: [docs/evm-escrow-spec.md](../docs/evm-escrow-spec.md).
+EVM escrow for fil-compute jobs. **Balance-based:** clients `deposit()`; Core (signer) calls `settleSuccess(user, jobId, attemptId, cuUsed, nodePayout)` when a job succeeds. Constructor takes signer address (Core’s escrow signer). Spec: [docs/evm-escrow-spec.md](../docs/evm-escrow-spec.md).
 
 ## Build and deploy
 

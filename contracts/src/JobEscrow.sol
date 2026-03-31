@@ -2,7 +2,7 @@
 pragma solidity ^0.8.19;
 
 /**
- * EVM escrow for datatzen jobs.
+ * EVM escrow for fil-compute jobs.
  * Two modes:
  * 1. Balance-based: clients deposit(); Core (signer) calls settleSuccess(user, jobId, attemptId, cuUsed, nodePayout) on job success.
  * 2. Legacy per-job lock: lock(jobId, nodePayout) payable; settleSuccess/refund for that job (no user param).
