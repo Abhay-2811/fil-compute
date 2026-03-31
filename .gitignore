@@ -5,6 +5,7 @@ dist/
 *.log
 coverage/
 coverage.json
+site/
 
 # Hardhat (contracts/)
 contracts/cache/
