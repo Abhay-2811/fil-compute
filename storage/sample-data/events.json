@@ -1,0 +1,10 @@
+[
+  {"ts": "2025-01-01T10:00:00Z", "event": "login", "user_id": "u1", "count": 1},
+  {"ts": "2025-01-01T10:01:00Z", "event": "click", "user_id": "u1", "page": "/home"},
+  {"ts": "2025-01-01T10:02:00Z", "event": "login", "user_id": "u2", "count": 1},
+  {"ts": "2025-01-01T10:05:00Z", "event": "purchase", "user_id": "u1", "amount": 29.99},
+  {"ts": "2025-01-01T10:10:00Z", "event": "click", "user_id": "u2", "page": "/pricing"},
+  {"ts": "2025-01-01T10:15:00Z", "event": "purchase", "user_id": "u2", "amount": 99.00},
+  {"ts": "2025-01-01T10:20:00Z", "event": "logout", "user_id": "u1"},
+  {"ts": "2025-01-01T10:25:00Z", "event": "purchase", "user_id": "u2", "amount": 15.50}
+]

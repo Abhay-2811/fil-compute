@@ -1,10 +1,14 @@
 import express, { type Request, type Response } from "express";
 import fs from "fs";
+import path from "path";
 import crypto from "crypto";
-import { parseDatasetIdFromCid } from "./config.js";
+import { parseDatasetIdFromCid, OUTPUT_UPLOAD_BACKEND, NODE_PUBLIC_URL, JOB_OUTPUT_DIR } from "./config.js";
 import { preflightData, retrieveDatasetFile } from "./retrieve.js";
-import { runDocker, computeCuUsed } from "./docker-runner.js";
+import { runDocker, checkDockerAvailable } from "./docker-runner.js";
 import { sendComplete } from "./complete-callback.js";
+import { uploadOutput, uploadArtifactToPresignedUrl } from "./output-upload.js";
+import { getOutput } from "./output-store.js";
+import { logger } from "./logger.js";
 
 const app = express();
 app.use(express.json());
@@ -15,12 +19,17 @@ app.use(express.json());
  * cid may be "dataset:N" for PDP dataset_id.
  */
 app.post("/preflight", async (req: Request, res: Response) => {
+  const body = req.body as Record<string, unknown>;
+  const jobId = body?.job_id as string | undefined;
+  const cid = body?.cid;
+
+  logger.info("Preflight request received", { job_id: jobId, cid });
+
   try {
-    const body = req.body as Record<string, unknown>;
-    const cid = body?.cid;
     const datasetId = parseDatasetIdFromCid(cid) ?? (body?.dataset_id as number | undefined);
 
     if (datasetId == null) {
+      logger.warn("Preflight rejected: missing or invalid cid/dataset_id", { job_id: jobId });
       return res.json({
         ok: false,
         error: {
@@ -30,10 +39,27 @@ app.post("/preflight", async (req: Request, res: Response) => {
       });
     }
 
+    logger.info("Checking Docker availability", { job_id: jobId });
+    const dockerCheck = await checkDockerAvailable().then(
+      () => null,
+      (err) => ({ code: "UNAVAILABLE" as const, message: err instanceof Error ? err.message : String(err) })
+    );
+    if (dockerCheck) {
+      logger.warn("Preflight failed: Docker not available", { job_id: jobId, error: dockerCheck.message });
+      return res.json({ ok: false, error: dockerCheck });
+    }
+    logger.info("Docker check passed", { job_id: jobId });
+
+    logger.info("Preflight: checking data availability", { job_id: jobId, dataset_id: datasetId });
     const result = await preflightData(datasetId);
+    if (result.ok) {
+      logger.info("Preflight succeeded", { job_id: jobId, dataset_id: datasetId });
+    } else {
+      logger.warn("Preflight failed: data not found", { job_id: jobId, dataset_id: datasetId, error: result.error?.code });
+    }
     return res.json(result);
   } catch (err) {
-    console.error("Preflight error:", err);
+    logger.error("Preflight error", { job_id: jobId, error: err instanceof Error ? err.message : String(err) });
     return res.status(500).json({
       ok: false,
       error: {
@@ -43,6 +69,8 @@ app.post("/preflight", async (req: Request, res: Response) => {
     });
   }
 });
+
+// client (code) -> core api ( almost there ) -> node api -> core api -> client  
 
 /**
  * POST /start
@@ -70,56 +98,146 @@ app.post("/start", async (req: Request, res: Response) => {
     !docker ||
     timeout_by == null
   ) {
+    logger.warn("Start rejected: missing required fields", { job_id: body.job_id });
     return res.status(400).json({ error: "Missing required fields" });
   }
 
   const datasetId = parseDatasetIdFromCid(cid) ?? (body.dataset_id as number | undefined);
   if (datasetId == null) {
+    logger.warn("Start rejected: cid/dataset_id not supported", { job_id: job_id });
     return res.status(400).json({
       error: "Only cid dataset:N or dataset_id supported for PDP",
     });
   }
 
+  logger.info("Start accepted, running job asynchronously", {
+    job_id: job_id,
+    attempt_id: attempt_id,
+    dataset_id: datasetId,
+    image: (docker as Record<string, unknown>)?.image,
+  });
   res.status(202).json({ accepted: true });
 
   (async () => {
+    const jobId = job_id as string;
+    const attemptId = attempt_id as string;
     try {
+      logger.info("Retrieving dataset file", { job_id: jobId, attempt_id: attemptId, dataset_id: datasetId });
       const dataFilePath = await retrieveDatasetFile(datasetId);
       if (!fs.existsSync(dataFilePath)) {
         throw new Error(`Retrieved file not found: ${dataFilePath}`);
       }
+      logger.info("Dataset file ready", { job_id: jobId, attempt_id: attemptId, data_file: dataFilePath });
 
       const dockerSpec = docker as Record<string, unknown>;
       const compReq = compute_requirements as Record<string, unknown>;
+      const image = dockerSpec.image as string;
+      let outputDir: string | undefined;
+      if (JOB_OUTPUT_DIR) {
+        outputDir = path.join(JOB_OUTPUT_DIR, jobId);
+        fs.mkdirSync(outputDir, { recursive: true });
+      }
+      const dockerEnv: Record<string, string> =
+        dockerSpec.env && typeof dockerSpec.env === "object"
+          ? { ...(dockerSpec.env as Record<string, string>) }
+          : {};
+      if (!dockerEnv.RESULT_FILENAME) {
+        dockerEnv.RESULT_FILENAME = `${jobId}.zip`;
+      }
+      if (outputDir && NODE_PUBLIC_URL) {
+        const base = NODE_PUBLIC_URL.replace(/\/$/, "");
+        dockerEnv.RESULT_URL_BASE = `${base}/output/${jobId}`;
+      }
+      logger.info("Starting Docker container", {
+        job_id: jobId,
+        attempt_id: attemptId,
+        image,
+        memory_mb: (compReq.memory_mb as number) || 512,
+        cpu_cores: (compReq.cpu_cores as number) || 1,
+        timeout_by,
+      });
       const { exitCode, stdout, stderr, wallSeconds, cpuSeconds, memoryMbPeak } =
         await runDocker({
-          image: dockerSpec.image as string,
+          image,
           command: dockerSpec.command as string[] | undefined,
-          env: dockerSpec.env as Record<string, string> | undefined,
+          env: dockerEnv,
           workdir: dockerSpec.workdir as string | undefined,
           dataFilePath,
+          outputDir,
           memoryMb: (compReq.memory_mb as number) || 512,
           cpuCores: (compReq.cpu_cores as number) || 1,
           timeoutBySeconds: timeout_by as number,
         });
 
       const metrics = { cpuSeconds, wallSeconds, memoryMbPeak };
+      logger.info("Docker container finished", {
+        job_id: jobId,
+        attempt_id: attemptId,
+        exit_code: exitCode,
+        wall_seconds: wallSeconds.toFixed(2),
+      });
 
       if (exitCode === 0) {
         const resultCid =
           "stdout:" +
           crypto.createHash("sha256").update(stdout).digest("hex").slice(0, 16);
+        let canonicalResultUrl: string | undefined;
+        if (dockerEnv.RESULT_UPLOAD_URL) {
+          if (!outputDir) {
+            throw new Error(
+              "RESULT_UPLOAD_URL provided but JOB_OUTPUT_DIR is not configured on node"
+            );
+          }
+          const artifactName =
+            (dockerEnv.RESULT_FILENAME || "model.zip").trim() || "model.zip";
+          const artifactPath = path.join(outputDir, artifactName);
+          await uploadArtifactToPresignedUrl(
+            jobId,
+            artifactPath,
+            dockerEnv.RESULT_UPLOAD_URL,
+            dockerEnv.RESULT_UPLOAD_CONTENT_TYPE
+          );
+          if (dockerEnv.RESULT_DOWNLOAD_URL) {
+            canonicalResultUrl = dockerEnv.RESULT_DOWNLOAD_URL;
+          } else if (dockerEnv.RESULT_OBJECT_URL) {
+            canonicalResultUrl = dockerEnv.RESULT_OBJECT_URL;
+          } else {
+            try {
+              const parsed = new URL(dockerEnv.RESULT_UPLOAD_URL);
+              parsed.search = "";
+              parsed.hash = "";
+              canonicalResultUrl = parsed.toString();
+            } catch {
+              canonicalResultUrl = undefined;
+            }
+          }
+        }
+        const uploadResult = await uploadOutput(jobId, stdout, stderr);
+        const resultUrl = canonicalResultUrl || uploadResult?.url;
+        logger.info("Sending SUCCESS to Core", {
+          job_id: jobId,
+          attempt_id: attemptId,
+          result_cid: resultCid,
+          result_url: resultUrl,
+        });
         await sendComplete({
-          jobId: job_id as string,
-          attemptId: attempt_id as string,
+          jobId,
+          attemptId,
           status: "SUCCESS",
           metrics,
           resultCid,
+          resultUrl,
         });
+        logger.info("Job completed successfully", { job_id: jobId, attempt_id: attemptId });
       } else {
+        logger.warn("Container exited with error, sending CONTAINER_ERROR to Core", {
+          job_id: jobId,
+          attempt_id: attemptId,
+          exit_code: exitCode,
+        });
         await sendComplete({
-          jobId: job_id as string,
-          attemptId: attempt_id as string,
+          jobId,
+          attemptId,
           status: "CONTAINER_ERROR",
           metrics,
           error: {
@@ -128,13 +246,18 @@ app.post("/start", async (req: Request, res: Response) => {
             logsTail: (stderr || stdout).slice(-8192),
           },
         });
+        logger.info("Job reported as CONTAINER_ERROR", { job_id: jobId, attempt_id: attemptId });
       }
     } catch (err) {
-      console.error("Start/run error:", err);
+      logger.error("Start/run error", {
+        job_id: jobId,
+        attempt_id: attemptId,
+        error: err instanceof Error ? err.message : String(err),
+      });
       try {
         await sendComplete({
-          jobId: job_id as string,
-          attemptId: attempt_id as string,
+          jobId,
+          attemptId,
           status: "CONTAINER_ERROR",
           metrics: { cpuSeconds: 0, wallSeconds: 0, memoryMbPeak: 0 },
           error: {
@@ -143,8 +266,13 @@ app.post("/start", async (req: Request, res: Response) => {
             logsTail: "",
           },
         });
+        logger.info("Sent CONTAINER_ERROR to Core after run failure", { job_id: jobId, attempt_id: attemptId });
       } catch (e) {
-        console.error("Failed to send CONTAINER_ERROR to Core:", e);
+        logger.error("Failed to send CONTAINER_ERROR to Core", {
+          job_id: jobId,
+          attempt_id: attemptId,
+          error: e instanceof Error ? e.message : String(e),
+        });
       }
     }
   })();
@@ -154,7 +282,48 @@ app.get("/health", (_req: Request, res: Response) => {
   res.json({ status: "ok" });
 });
 
+/** GET /output/:job_id — serve stored job stdout (when OUTPUT_UPLOAD_BACKEND=self) */
+app.get("/output/:job_id", (req: Request, res: Response) => {
+  const jobId = req.params.job_id;
+  const entry = getOutput(jobId);
+  if (!entry) {
+    return res.status(404).json({ error: "NOT_FOUND", message: "Job output not found or expired" });
+  }
+  res.type("text/plain").send(entry.stdout);
+});
+
+/** GET /output/:job_id/files/:filename — serve artifact file (when JOB_OUTPUT_DIR set). Job writes to /data/output/ in container. */
+app.get("/output/:job_id/files/:filename", (req: Request, res: Response) => {
+  const { job_id: jobId, filename } = req.params;
+  if (!JOB_OUTPUT_DIR) {
+    return res.status(503).json({ error: "NOT_CONFIGURED", message: "JOB_OUTPUT_DIR not set" });
+  }
+  if (!filename || filename.includes("..") || filename.includes("/") || filename.includes("\\")) {
+    return res.status(400).json({ error: "BAD_REQUEST", message: "Invalid filename" });
+  }
+  const filePath = path.join(JOB_OUTPUT_DIR, jobId, filename);
+  if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
+    return res.status(404).json({ error: "NOT_FOUND", message: "File not found" });
+  }
+  const ext = path.extname(filename).toLowerCase();
+  const types: Record<string, string> = {
+    ".zip": "application/zip",
+    ".json": "application/json",
+    ".pkl": "application/octet-stream",
+    ".pt": "application/octet-stream",
+    ".onnx": "application/octet-stream",
+    ".bin": "application/octet-stream",
+  };
+  res.type(types[ext] || "application/octet-stream");
+  res.sendFile(path.resolve(filePath));
+});
+
 const port = Number(process.env.PORT) || 4000;
 app.listen(port, () => {
-  console.log(`Node agent listening on http://localhost:${port}`);
+  logger.info("Node agent started", {
+    port,
+    url: `http://localhost:${port}`,
+    output_upload_backend: OUTPUT_UPLOAD_BACKEND,
+    result_url_configured: OUTPUT_UPLOAD_BACKEND === "self" ? !!NODE_PUBLIC_URL : undefined,
+  });
 });

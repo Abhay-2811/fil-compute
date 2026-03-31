@@ -8,6 +8,7 @@ const BASE = process.env.CORE_URL || "http://localhost:3000";
 const jobPayload = {
   nodeid: "node-001",
   cid: "bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi",
+  client_address: "default",
   compute_requirements: { cpu_cores: 2, memory_mb: 4096 },
   docker: { image: "alpine:3.18", command: ["echo", "hello"] },
   timeout_by: 300,

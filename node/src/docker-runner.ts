@@ -1,9 +1,39 @@
 import { spawn } from "child_process";
 import path from "path";
 import fs from "fs";
-import { CU_WEIGHTS } from "./config.js";
+import { CU_WEIGHTS, DOCKER_BIN, DOCKER_NETWORK } from "./config.js";
+import { logger } from "./logger.js";
 
 const DATA_MOUNT_PATH = "/data/input";
+
+/**
+ * Check that Docker is installed and runnable (for preflight).
+ * Resolves if `docker --version` succeeds; rejects with message otherwise.
+ */
+export function checkDockerAvailable(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const proc = spawn(DOCKER_BIN, ["--version"], { stdio: ["ignore", "pipe", "pipe"] });
+    let stderr = "";
+    proc.stderr?.on("data", (d: Buffer) => {
+      stderr += d.toString();
+    });
+    proc.on("close", (code) => {
+      if (code === 0) return resolve();
+      reject(new Error(`Docker exited ${code}: ${stderr || "no output"}`));
+    });
+    proc.on("error", (err: NodeJS.ErrnoException) => {
+      if (err.code === "ENOENT") {
+        reject(
+          new Error(
+            `Docker not found. Install Docker or set DOCKER_BIN to the full path (e.g. DOCKER_BIN=/usr/bin/docker).`
+          )
+        );
+      } else {
+        reject(err);
+      }
+    });
+  });
+}
 
 export interface RunDockerOpts {
   image: string;
@@ -11,6 +41,8 @@ export interface RunDockerOpts {
   env?: Record<string, string>;
   workdir?: string;
   dataFilePath: string;
+  /** Optional host path to mount at /data/output (writable). Job can write artifacts (e.g. model.zip) here. */
+  outputDir?: string;
   memoryMb: number;
   cpuCores: number;
   timeoutBySeconds: number;
@@ -42,6 +74,7 @@ export function runDocker(opts: RunDockerOpts): Promise<RunDockerResult> {
     env = {},
     workdir,
     dataFilePath,
+    outputDir,
     memoryMb,
     cpuCores,
     timeoutBySeconds,
@@ -50,6 +83,14 @@ export function runDocker(opts: RunDockerOpts): Promise<RunDockerResult> {
   if (!dataFilePath || !fs.existsSync(dataFilePath)) {
     return Promise.reject(new Error(`Data file not found: ${dataFilePath}`));
   }
+
+  logger.debug("Spawning Docker run", {
+    image,
+    data_file: dataFilePath,
+    memory_mb: memoryMb,
+    cpus: cpuCores,
+    timeout_seconds: timeoutBySeconds,
+  });
 
   const args = [
     "run",
@@ -61,8 +102,11 @@ export function runDocker(opts: RunDockerOpts): Promise<RunDockerResult> {
     "--cpus",
     String(Math.max(0.01, cpuCores)),
     "--network",
-    "none",
+    DOCKER_NETWORK,
   ];
+  if (outputDir) {
+    args.push("-v", `${path.resolve(outputDir)}:/data/output`);
+  }
 
   for (const [k, v] of Object.entries(env)) {
     args.push("-e", `${k}=${v}`);
@@ -77,7 +121,7 @@ export function runDocker(opts: RunDockerOpts): Promise<RunDockerResult> {
 
   return new Promise((resolve, reject) => {
     const startWall = Date.now();
-    const proc = spawn("docker", args, {
+    const proc = spawn(DOCKER_BIN, args, {
       stdio: ["ignore", "pipe", "pipe"],
     });
 
@@ -104,8 +148,14 @@ export function runDocker(opts: RunDockerOpts): Promise<RunDockerResult> {
       const wallSeconds = (Date.now() - startWall) / 1000;
       const cpuSeconds = wallSeconds * Math.min(cpuCores, 1);
       const memoryMbPeak = memoryMb;
+      const finalExitCode = exitCode ?? (signal === "SIGKILL" ? 137 : 1);
+      logger.debug("Docker process closed", {
+        exit_code: finalExitCode,
+        signal: signal ?? undefined,
+        wall_seconds: wallSeconds.toFixed(2),
+      });
       resolve({
-        exitCode: exitCode ?? (signal === "SIGKILL" ? 137 : 1),
+        exitCode: finalExitCode,
         stdout,
         stderr,
         wallSeconds,
@@ -113,9 +163,17 @@ export function runDocker(opts: RunDockerOpts): Promise<RunDockerResult> {
         memoryMbPeak,
       });
     });
-    proc.on("error", (err) => {
+    proc.on("error", (err: NodeJS.ErrnoException) => {
       clearTimeout(timeout);
-      reject(err);
+      if (err.code === "ENOENT") {
+        reject(
+          new Error(
+            `Docker not found (ENOENT). Install Docker or set DOCKER_BIN to the full path (e.g. DOCKER_BIN=/usr/bin/docker). Current: ${DOCKER_BIN}`
+          )
+        );
+      } else {
+        reject(err);
+      }
     });
   });
 }

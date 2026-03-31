@@ -5,9 +5,9 @@
 | Code | When | User impact | Escrow |
 |------|------|-------------|--------|
 | **PREFLIGHT_FAIL** | Node unavailable, insufficient capacity, or CID not found | Job rejected; no execution | No charge |
-| **CONTAINER_ERROR** | Container exited non-zero; node reported COMPLETE with status=CONTAINER_ERROR | User gets error + optional logs tail | Charge `cu_used`; release remainder |
-| **NODE_FAULT** | Node disconnected, no COMPLETE received, or unreachable before completion | Job failed without reliable result | Full refund |
-| **TIMEOUT** | Job exceeded `timeout_by` (wall time) before COMPLETE | Treated as node/reliability failure | Full refund (same as NODE_FAULT) |
+| **CONTAINER_ERROR** | Container exited non-zero; node reported COMPLETE with status=CONTAINER_ERROR | User gets error + optional logs tail | Charge `cu_used` |
+| **NODE_FAULT** | Node disconnected, no COMPLETE received, or unreachable before completion | Job failed without reliable result | No settle debit |
+| **TIMEOUT** | Job exceeded `timeout_by` (wall time) before COMPLETE | Treated as node/reliability failure | No settle debit (same as NODE_FAULT) |
 
 ## Mapping to job status
 

@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://datatzen.io/schemas/job.json",
+  "$id": "https://fil-compute.io/schemas/job.json",
   "title": "Job",
   "description": "Job submit request and job resource (Core API)",
   "definitions": {

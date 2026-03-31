@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://datatzen.io/schemas/receipt.json",
+  "$id": "https://fil-compute.io/schemas/receipt.json",
   "title": "Receipt",
   "description": "Node-signed receipt returned on successful job completion; used for settlement",
   "type": "object",

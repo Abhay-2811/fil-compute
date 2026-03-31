@@ -1,15 +1,21 @@
 import { ethers } from "hardhat";
 
 async function main() {
-  const [deployer] = await ethers.getSigners();
+  const signers = await ethers.getSigners();
+  const deployer = signers[0];
+  if (!deployer) {
+    throw new Error("No signer: set PRIVATE_KEY in .env (or env) for filecoin_calibration");
+  }
   console.log("Deploying JobEscrow with account:", deployer.address);
   console.log("Account balance:", (await ethers.provider.getBalance(deployer.address)).toString());
 
   const JobEscrow = await ethers.getContractFactory("JobEscrow");
-  const contract = await JobEscrow.deploy();
+  // Signer = address that Core uses (ESCROW_SIGNER_PRIVATE_KEY). Use deployer so same key can run Core.
+  const contract = await JobEscrow.deploy(deployer.address);
   await contract.waitForDeployment();
   const address = await contract.getAddress();
   console.log("JobEscrow deployed to:", address);
+  console.log("Signer (set for balance-based settle):", deployer.address);
 
   // For Core EVM adapter, set:
   // ESCROW_RPC_URL=<network rpc>
