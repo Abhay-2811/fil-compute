@@ -1,6 +1,35 @@
 # Quickstart
 
-## 1) Upload input to PDP
+Fresh-user path: from clone to first successful job run.
+
+## Live hackathon deployment defaults
+
+- Core URL: `https://core.abhayu.com`
+- PDP endpoint: `https://pdp.abhayu.com`
+- PDP provider id: `22`
+- Public demo environment is available until end of hackathon.
+
+## 0) Clone repo and open client directory
+
+```bash
+git clone <YOUR_REPO_URL>
+cd fil-compute/client
+npm install
+```
+
+Run all commands below from the `client/` directory.
+
+## 1) Set core URL once
+
+```bash
+# Linux/macOS
+export CORE_URL=https://core.abhayu.com
+
+# Windows PowerShell
+$env:CORE_URL="https://core.abhayu.com"
+```
+
+## 2) Upload input to PDP (provider id 22)
 
 ```bash
 npx fil-compute storage upload-pdp \
@@ -11,16 +40,18 @@ npx fil-compute storage upload-pdp \
 
 Save the returned `Dataset ID`.
 
-## 2) Fund escrow
+If needed, verify provider info in your PDP setup at `https://pdp.abhayu.com`.
+
+## 3) Fund escrow
 
 ```bash
 npx fil-compute escrow deposit \
   --amount 1000 \
   --private-key 0xYOUR_PRIVATE_KEY \
-  --core-url https://core.example.com
+  --core-url https://core.abhayu.com
 ```
 
-## 3) Run compute
+## 4) Run compute
 
 ```bash
 npx fil-compute run \
@@ -28,15 +59,30 @@ npx fil-compute run \
   --dataset-id <DATASET_ID> \
   --job-file examples/docker-compute-job-ml.yaml \
   --private-key 0xYOUR_PRIVATE_KEY \
-  --core-url https://core.example.com
+  --core-url https://core.abhayu.com
 ```
 
-## 4) Check result
+## Fast path: ready "train your own model" example
+
+Use preloaded dataset id `12909` and the ready example spec:
+
+```bash
+npx fil-compute run \
+  --compute-provider node-001 \
+  --dataset-id 12909 \
+  --job-file ../examples/train-your-own-model/job.yaml \
+  --private-key 0xYOUR_PRIVATE_KEY \
+  --core-url https://core.abhayu.com
+```
+
+Reference: `../examples/train-your-own-model/README.md`
+
+## 5) Check result
 
 - `result_url` from CLI output.
-- If S3 mode is enabled, canonical `result_url` is a presigned GET link.
+- If Akave O3 mode is enabled, canonical `result_url` is a presigned GET link.
 
-## Optional: run with client-owned S3 artifacts
+## 6) Optional: run with client-owned Akave O3 artifacts
 
 Add to your job YAML:
 
@@ -52,10 +98,10 @@ storage:
 
 Then run `fil-compute run` normally. The client prepares presigned URLs, node uploads artifact, and Core returns presigned GET as `result_url`.
 
-## Verify state transitions quickly
+## 7) Verify state transitions quickly
 
 ```bash
-curl -s https://core.example.com/jobs/<JOB_ID>
+curl -s https://core.abhayu.com/jobs/<JOB_ID>
 ```
 
 Expected progression: `SUBMITTED -> PREFLIGHTING -> RUNNING -> SUCCEEDED` (or terminal failure).

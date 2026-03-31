@@ -1,0 +1,107 @@
+# Train-your-own-model job (compute-to-data)
+# Reads data from /data/input (from --dataset-id), trains a classifier,
+# and writes model artifacts to /data/output.
+docker:
+  image: python:3.11-slim
+  env:
+    RESULT_FILENAME: ""
+  command:
+    - sh
+    - -c
+    - |
+      set -e
+      pip install -q --no-cache-dir pandas scikit-learn joblib
+      python3 -c "
+      import io, os, sys, zipfile
+      from pathlib import Path
+      import pandas as pd
+      from sklearn.ensemble import RandomForestClassifier
+      from sklearn.model_selection import train_test_split
+      from sklearn.preprocessing import LabelEncoder
+      from sklearn.metrics import accuracy_score, classification_report
+      import joblib
+
+      data_path = Path('/data/input')
+      if not data_path.exists() or data_path.stat().st_size == 0:
+          print('No /data/input found. Pass a valid --dataset-id.'); sys.exit(1)
+
+      raw = data_path.read_text(encoding='utf-8', errors='replace')
+      lines = [l for l in raw.splitlines() if l.strip()]
+      if not lines:
+          print('Input dataset is empty.'); sys.exit(1)
+
+      # Detect common Adult dataset layout first.
+      first = lines[0].split(',')
+      looks_like_adult = len(first) == 15 and first[0].strip().isdigit()
+      if looks_like_adult:
+          cols = ['age','workclass','fnlwgt','education','ednum','marital','occupation','relationship','race','sex','capgain','caploss','hrs','country','income']
+          df = pd.read_csv(io.StringIO(raw), header=None, names=cols, na_values=' ?')
+          df = df.dropna()
+          df['income'] = (df['income'].astype(str).str.strip().str.rstrip('.') == '>50K').astype(int)
+          cat = ['workclass','education','marital','occupation','relationship','race','sex','country']
+          for c in cat:
+              df[c] = LabelEncoder().fit_transform(df[c].astype(str))
+          X = df.drop(columns=['income'])
+          y = df['income']
+          task = 'Adult income >50K'
+      else:
+          df = pd.read_csv(io.StringIO(raw))
+          if len(df.columns) < 2:
+              print('Need at least 2 columns for features + label.'); sys.exit(1)
+          if 'label' in df.columns:
+              y = df['label']
+              X = df.drop(columns=['label'])
+          else:
+              y = df.iloc[:, -1]
+              X = df.iloc[:, :-1]
+          for c in X.select_dtypes(include=['object']).columns:
+              X[c] = LabelEncoder().fit_transform(X[c].astype(str))
+          if str(y.dtype) == 'object':
+              y = LabelEncoder().fit_transform(y.astype(str))
+          task = 'Generic CSV (last column or label column)'
+
+      X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+      model = RandomForestClassifier(n_estimators=120, max_depth=12, random_state=42, n_jobs=-1)
+      model.fit(X_train, y_train)
+      pred = model.predict(X_test)
+      acc = accuracy_score(y_test, pred)
+      print('Task:', task)
+      print('Rows:', len(X), 'Features:', X.shape[1])
+      print('Accuracy:', round(acc, 4))
+      print(classification_report(y_test, pred))
+
+      out_dir = Path('/data/output')
+      if not out_dir.is_dir():
+          print('/data/output not mounted; artifacts not persisted.')
+          sys.exit(0)
+
+      pkl_path = out_dir / 'model.pkl'
+      joblib.dump(model, pkl_path)
+
+      zip_name = os.environ.get('RESULT_FILENAME', '').strip() or 'model.zip'
+      zip_path = out_dir / zip_name
+      with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
+          zf.write(pkl_path, 'model.pkl')
+
+      base = os.environ.get('RESULT_URL_BASE', '').strip()
+      if base:
+          print('Artifact URL:', base + '/files/' + zip_name)
+      else:
+          print('Artifacts saved to:', str(zip_path))
+      "
+
+compute_requirements:
+  cpu_cores: 2
+  memory_mb: 2048
+
+# Optional Akave O3 result storage (recommended)
+storage:
+  provider: s3
+  bucket: akave-o3-results
+  region: us-east-1
+  key_prefix: jobs
+  expires_seconds: 3600
+  endpoint: https://o3-rc3.akave.xyz
+
+timeout_by: 600
+max_cost_cu: 30

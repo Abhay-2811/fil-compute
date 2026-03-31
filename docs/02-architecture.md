@@ -1,5 +1,12 @@
 # Architecture
 
+## Live deployment used in docs
+
+- Core: `https://core.abhayu.com`
+- PDP provider endpoint: `https://pdp.abhayu.com`
+- PDP provider id: `22`
+- Public environment available until end of hackathon.
+
 ```mermaid
 flowchart LR
   clientCli[ClientCLI] -->|submit job| coreApi[CoreAPI]
@@ -17,7 +24,7 @@ flowchart LR
 
 ## Components
 
-- **Client**: uploads input to PDP, submits jobs, prepares optional Akave O3 (S3-compatible) presigned URLs.
+- **Client**: uploads input to PDP provider `22`, submits jobs, prepares optional Akave O3 (S3-compatible) presigned URLs.
 - **Core**: job API, state machine, escrow checks/settlement.
 - **Node**: dataset resolve/retrieve, Docker run, result callback.
 - **Escrow**: balance-based payment (`deposit`, `settleSuccess`).

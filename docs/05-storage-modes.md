@@ -6,12 +6,23 @@
 - stdout: `GET /output/:job_id`
 - files: `GET /output/:job_id/files/:filename` (requires `JOB_OUTPUT_DIR`)
 
-## B) Client-owned S3 (recommended)
+## B) Client-owned Akave O3 (recommended)
 
 - Client generates presigned PUT/GET URLs at submit time.
 - Node uploads artifact to PUT URL after successful compute.
 - Core stores GET URL as canonical `result_url`.
-- Client pays S3 storage and transfer costs.
+- Client pays storage/transfer in their own Akave O3 bucket.
+
+## Get Akave O3 credentials
+
+1. Open [console.akave.com](https://console.akave.com).
+2. Create/select an O3 bucket (S3-compatible storage backed by Filecoin).
+3. Generate access key + secret key.
+4. Export keys in client environment:
+   - `AWS_ACCESS_KEY_ID`
+   - `AWS_SECRET_ACCESS_KEY`
+   - optional `AWS_SESSION_TOKEN`
+5. Use the same Akave console UI to see uploaded artifacts in your bucket after jobs finish.
 
 ## Result URL behavior
 
@@ -19,9 +30,9 @@
 |---|---|---|
 | Node stdout | Node `GET /output/:job_id` | logs-first workflows |
 | Node artifact file | Node `GET /output/:job_id/files/:filename` | quick local binary retrieval |
-| S3 mode | Presigned GET URL | client-controlled retention/costs |
+| Akave O3 mode | Presigned GET URL | client-controlled retention/costs |
 
-## YAML snippet
+## YAML snippet (Akave O3)
 
 ```yaml
 storage:
@@ -39,7 +50,7 @@ storage:
 - If `storage.filename` is omitted, node defaults to `<job_id>.zip`.
 - Node upload failure to presigned PUT URL is treated as execution failure.
 
-## S3 mode flow
+## Akave O3 flow
 
 ```mermaid
 sequenceDiagram
