@@ -1,7 +1,0 @@
--> Add storage module in client lib
--> Add akave/s3 support 
--> Presentation future ideas imp: 
-    -> [ once C-O-D is possible we can create ceph like module to store data in a fault tolerant cluster where each pdp node acts as a disk ]
-    -> [ if multiple nodes impleemnt this, a cluster of nodes can be created and parralel compute can be achieved with aggregation client sided ]
-    -> [ Train model on large open data without moving the data hence saving on egress costs ]
--> Fix License
